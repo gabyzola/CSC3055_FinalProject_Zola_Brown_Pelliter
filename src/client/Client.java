@@ -180,22 +180,22 @@ public class Client {
         }
 
         long timestamp = (long) response.get("timestamp");
-
-
+        long fileSize = (long) response.get("fileSize"); 
+        
         try (InputStream in = networkManager.getInputStream();
              BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(savePath))) {
             byte[] buffer = new byte[4096];
             int read;
             long totalRead = 0;
-
+        
             while (totalRead < fileSize && (read = in.read(buffer)) > 0) {
                 bos.write(buffer, 0, read);
                 totalRead += read;
             }
         }
-
-        System.out.println("[*] Download complete: " + savePath);
-    }
+        
+        System.out.println("[*] Download complete: " + savePath); 
+        
 
     private void viewBlockchainLog() throws IOException {
         JSONObject request = new JSONObject();
@@ -204,7 +204,8 @@ public class Client {
         networkManager.sendJSON(request);
         JSONObject response = networkManager.receiveJSON();
 
-        if (response.has("log")) {
+        if (response.containsKey("log"))
+            {
             System.out.println("=== Blockchain Log ===");
             System.out.println(response.getString("log"));
         } else {
