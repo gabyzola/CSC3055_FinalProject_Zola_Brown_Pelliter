@@ -178,7 +178,9 @@ public class Client {
             System.err.println("[!] Authentication failed: " + response.get("error"));
             System.exit(1);
         }
-        long fileSize = response.getLong("filesize");
+
+        long timestamp = (long) response.get("timestamp");
+
 
         try (InputStream in = networkManager.getInputStream();
              BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(savePath))) {
