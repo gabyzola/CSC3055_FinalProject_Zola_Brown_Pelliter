@@ -63,7 +63,8 @@ public class Client {
         networkManager.sendJSON(authRequest);
         JSONObject response = networkManager.receiveJSON();
 
-        if (response.has("status") && "success".equals(response.getString("status"))) {
+        if (response.containsKey("status") && response.get("status").toString().equals("success"))
+ {
             System.out.println("[+] Authentication successful.");
         } else {
             System.err.println("[!] Authentication failed: " + response.getString("error"));
