@@ -11,7 +11,7 @@ public class CryptoManager {
     // Method to generate a secret key for AES
     public static SecretKey generateSecretKey() throws Exception {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
-        keyGenerator.init(128); // AES key size (128, 192, 256 bits)
+        keyGenerator.init(128); 
         return keyGenerator.generateKey();
     }
 
@@ -32,7 +32,7 @@ public class CryptoManager {
         return new String(decryptedBytes);
     }
 
-    // Example usage of converting string to SecretKey (if you have a key in Base64)
+    //Converting string to SecretKey 
     public static SecretKey convertToSecretKey(String keyString) {
         byte[] decodedKey = Base64.getDecoder().decode(keyString);
         return new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
