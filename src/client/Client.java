@@ -195,6 +195,7 @@ public class Client {
         }
         
         System.out.println("[*] Download complete: " + savePath); 
+    }
         
 
     private void viewBlockchainLog() throws IOException {
