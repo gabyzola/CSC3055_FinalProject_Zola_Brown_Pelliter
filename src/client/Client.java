@@ -172,11 +172,12 @@ public class Client {
         networkManager.sendJSON(request);
         JSONObject response = networkManager.receiveJSON();
 
-        if (!response.has("filesize")) {
-            System.out.println("[!] Server could not provide file.");
-            return;
+        if (response.get("status") != null && response.get("status").toString().equals("success")) {
+            System.out.println("[+] Authentication successful.");
+        } else {
+            System.err.println("[!] Authentication failed: " + response.get("error"));
+            System.exit(1);
         }
-
         long fileSize = response.getLong("filesize");
 
         try (InputStream in = networkManager.getInputStream();
