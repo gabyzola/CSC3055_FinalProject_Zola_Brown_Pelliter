@@ -1,44 +1,48 @@
 package client;
 
-import merrimackutil.json.JSONSerializable;
 import merrimackutil.json.types.JSONObject;
-import merrimackutil.json.types.JSONType;
 
 import java.io.*;
 import java.net.Socket;
 
 public class NetworkManager {
-    private Socket socket;
-    private BufferedReader reader;
-    private BufferedWriter writer;
+    private final Socket socket;
+    private final BufferedReader in;
+    private final BufferedWriter out;
 
     public NetworkManager(Socket socket) throws IOException {
         this.socket = socket;
-        this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        this.writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+        this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        this.out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
     }
 
     public void sendJSON(JSONObject json) throws IOException {
-        writer.write(json.toString());
-        writer.newLine();
-        writer.flush();
+        out.write(json.toString());
+        out.newLine();
+        out.flush();
     }
 
     public JSONObject receiveJSON() throws IOException {
-        String line = reader.readLine();
-        if (line != null && !line.isEmpty()) {
+        String line = in.readLine();
+        if (line != null) {
             return new JSONObject();
         }
-        return new JSONObject(); 
+        return new JSONObject(); // Return empty JSON if null
     }
 
-    public void close() {
-        try {
-            if (reader != null) reader.close();
-            if (writer != null) writer.close();
-            if (socket != null) socket.close();
-        } catch (IOException e) {
-            System.err.println("[!] Network cleanup error: " + e.getMessage());
-        }
+    // ✅ Add these two methods to expose the raw streams if needed:
+    public InputStream getInputStream() throws IOException {
+        return socket.getInputStream();
+    }
+
+    public OutputStream getOutputStream() throws IOException {
+        return socket.getOutputStream();
+    }
+
+    public void close() throws IOException {
+        socket.close();
+        in.close();
+        out.close();
     }
 }
+
