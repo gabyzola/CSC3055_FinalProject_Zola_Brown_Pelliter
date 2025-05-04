@@ -191,7 +191,7 @@ public class User implements JSONSerializable {
         byte[] secret = new byte[20]; 
         random.nextBytes(secret);
 
-        return Base64.getEncoder().encodeToString(secret);
+        return merrimackutil.codec.Base32.encodeToString(secret, true); // true to ignore padding
     }
 
     /**

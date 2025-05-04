@@ -87,7 +87,7 @@ public class Constants {
     public static final int TOTP_WINDOW_SIZE = 1; // plus or minues 30 seconds
     public static final int TOTP_CODE_DIGITS = 6; 
     public static final int TOTP_TIME_STEP_SECONDS = 30; 
-    public static final String TOTP_ALGORITHM = "HmacSHA256";
+    public static final String TOTP_ALGORITHM = "HmacSHA1";
 
     /**
      * blockchain parameters, controls blockchain structure and behavior
