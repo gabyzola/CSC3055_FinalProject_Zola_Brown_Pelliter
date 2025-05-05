@@ -20,7 +20,7 @@ public class Constants {
     public static final String MSG_TYPE_AUTH_REQUEST = "AUTH_REQUEST";
     public static final String MSG_TYPE_AUTH_RESPONSE = "AUTH_RESPONSE";
     public static final String MSG_TYPE_TOTP_CHALLENGE = "TOTP_CHALLENGE";
-    public static final String MSG_TOTP_RESPONSE = "TOTP_RESPONSE";
+    public static final String MSG_TYPE_TOTP_RESPONSE = "TOTP_RESPONSE";
     public static final String MSG_TYPE_FILE_UPLOAD = "FILE_UPLOAD";
     public static final String MSG_TYPE_FILE_DOWNLOAD = "FILE_DOWNLOAD";
     public static final String MSG_TYPE_FILE_LIST = "FILE_LIST";
