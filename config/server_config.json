@@ -4,7 +4,8 @@
       "max_connections": 100,
       "thread_pool_size": 10,
       "session_timeout_mins": 30,
-      "bind_address": "0.0.0.0"
+      "bind_address": "0.0.0.0",
+      "maintenance_interval_mins" : 10
     },
     "storage": {
       "file_storage_directory": "./stores/files",
