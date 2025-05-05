@@ -89,7 +89,7 @@ public class Transaction {
         return computeTransactionId().equals(transactionId);
     }
 
-    public FileMetadata getMetadata() {
+    public FileMetadata getMetadata(){
         return metadata;
     }
 }
