@@ -43,7 +43,7 @@ public class FileServer {
      */
     public static void main(String[] args) {
 
-        System.out.println("FileServer: Starting PQ Blockchai File Server...");
+        System.out.println("FileServer: Starting PQ Blockchain File Server...");
 
         String configPath = "config/server_config.json";
         if (args.length > 0) {
