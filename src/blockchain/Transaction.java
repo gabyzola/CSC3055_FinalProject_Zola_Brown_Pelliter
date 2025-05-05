@@ -15,6 +15,8 @@ public class Transaction {
     private String fileHash;
     private long timestamp;
     private String signature; // base64-encoded signature of fileHash + timestamp + uploaderId
+    private FileMetadata metadata; // Holds encrypted file details and access control
+
 
     // Constructor
     public Transaction(String uploaderId, String fileHash, String signature) throws Exception {
@@ -85,5 +87,9 @@ public class Transaction {
     // (Optional) validate the transaction’s integrity
     public boolean isValid() throws NoSuchAlgorithmException {
         return computeTransactionId().equals(transactionId);
+    }
+
+    public FileMetadata getMetadata(){
+        return metadata;
     }
 }
