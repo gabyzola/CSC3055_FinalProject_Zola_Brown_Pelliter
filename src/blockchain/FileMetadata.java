@@ -6,38 +6,62 @@ import merrimackutil.json.types.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Stores metadata about files in the blockchain
+ */
 public class FileMetadata {
-
     private String fileName;
+    private String fileHash;
     private long fileSize;
-    private String fileType;
-    private String encryptedSymmetricKey; // base64-encoded AES key
-    private String fileHash;              // SHA3-256, base64
-    private String uploaderId;
-    private List<String> allowedUsers;    // user IDs allowed access
+    private String storageFileName;
+    private String encryptedKey;
+    private String owner;
+    private long timeStamp;
+    private List<String> allowedUsers;
 
-    // Constructor
-    public FileMetadata(String fileName, long fileSize, String fileType,
-                        String encryptedSymmetricKey, String fileHash,
-                        String uploaderId, List<String> allowedUsers) {
+    /**
+     * Constructor for file metadata
+     * @param fileName Original file name
+     * @param fileHash Hash of the file
+     * @param fileSize Size of the file in bytes
+     * @param storageFileName Name of file in storage
+     * @param encryptedKey Encrypted symmetric key
+     * @param owner Owner of the file
+     * @param timeStamp Upload timestamp
+     */
+    public FileMetadata(String fileName, String fileHash, long fileSize, String storageFileName, 
+                        String encryptedKey, String owner, long timeStamp) {
         this.fileName = fileName;
-        this.fileSize = fileSize;
-        this.fileType = fileType;
-        this.encryptedSymmetricKey = encryptedSymmetricKey;
         this.fileHash = fileHash;
-        this.uploaderId = uploaderId;
-        this.allowedUsers = allowedUsers;
+        this.fileSize = fileSize;
+        this.storageFileName = storageFileName;
+        this.encryptedKey = encryptedKey;
+        this.owner = owner;
+        this.timeStamp = timeStamp;
+        this.allowedUsers = new ArrayList<>();
+        this.allowedUsers.add(owner); // Owner always has access
     }
 
-    // Serialize FileMetadata to JSON
-    public JSONObject toJSON() {
+    /**
+     * Private constructor for deserialization
+     */
+    private FileMetadata() {
+        this.allowedUsers = new ArrayList<>();
+    }
+
+    /**
+     * Convert to JSONObject
+     * @return JSON representation
+     */
+    public JSONObject toJSONObject() {
         JSONObject obj = new JSONObject();
         obj.put("fileName", fileName);
-        obj.put("fileSize", fileSize);
-        obj.put("fileType", fileType);
-        obj.put("encryptedSymmetricKey", encryptedSymmetricKey);
         obj.put("fileHash", fileHash);
-        obj.put("uploaderId", uploaderId);
+        obj.put("fileSize", fileSize);
+        obj.put("storageFileName", storageFileName);
+        obj.put("encryptedKey", encryptedKey);
+        obj.put("owner", owner);
+        obj.put("timeStamp", timeStamp);
 
         JSONArray allowedArray = new JSONArray();
         for (String user : allowedUsers) {
@@ -48,35 +72,68 @@ public class FileMetadata {
         return obj;
     }
 
-    // Deserialize from JSON
-    public static FileMetadata fromJSON(String json) throws Exception {
-        JSONObject obj = new JSONObject();
+    /**
+     * Deserialize from JSON
+     * @param jsonObj JSON object to deserialize
+     * @return FileMetadata object
+     */
+    public static FileMetadata fromJSON(JSONObject jsonObj) {
+        FileMetadata metadata = new FileMetadata();
+        
+        metadata.fileName = jsonObj.getString("fileName");
+        metadata.fileHash = jsonObj.getString("fileHash");
+        
+        Number fileSize = (Number) jsonObj.get("fileSize");
+        metadata.fileSize = fileSize.longValue();
+        
+        metadata.storageFileName = jsonObj.getString("storageFileName");
+        metadata.encryptedKey = jsonObj.getString("encryptedKey");
+        metadata.owner = jsonObj.getString("owner");
+        
+        Number timestamp = (Number) jsonObj.get("timeStamp");
+        metadata.timeStamp = timestamp.longValue();
 
-        String fileName = obj.getString("fileName");
-        long fileSize = ((Number) obj.get("fileSize")).longValue();
-        String fileType = obj.getString("fileType");
-        String encryptedKey = obj.getString("encryptedSymmetricKey");
-        String fileHash = obj.getString("fileHash");
-        String uploaderId = obj.getString("uploaderId");
-
-        JSONArray allowedArray = obj.getArray("allowedUsers");
-        List<String> allowedUsers = new ArrayList<>();
-        for (int i = 0; i < allowedArray.size(); i++) {
-            allowedUsers.add(allowedArray.getString(i));
+        JSONArray allowedArray = jsonObj.getArray("allowedUsers");
+        if (allowedArray != null) {
+            for (int i = 0; i < allowedArray.size(); i++) {
+                String user = allowedArray.getString(i);
+                if (user != null) {
+                    metadata.allowedUsers.add(user);
+                }
+            }
         }
 
-        return new FileMetadata(fileName, fileSize, fileType, encryptedKey, fileHash, uploaderId, allowedUsers);
+        return metadata;
     }
 
-    // Optional: Validate metadata (basic structure & presence)
-    public boolean isValid() {
-        return fileName != null && !fileName.isEmpty()
-            && fileSize > 0
-            && fileType != null && !fileType.isEmpty()
-            && encryptedSymmetricKey != null && !encryptedSymmetricKey.isEmpty()
-            && fileHash != null && !fileHash.isEmpty()
-            && uploaderId != null && !uploaderId.isEmpty()
-            && allowedUsers != null;
+    /**
+     * Add a user to the allowed list
+     * @param username User to add
+     */
+    public void addAllowedUser(String username) {
+        if (!allowedUsers.contains(username)) {
+            allowedUsers.add(username);
+        }
+    }
+
+    /**
+     * Remove a user from the allowed list
+     * @param username User to remove
+     */
+    public void removeAllowedUser(String username) {
+        // Owner always has access
+        if (!username.equals(owner)) {
+            allowedUsers.remove(username);
+        }
+    }
+
+    /**
+     * Check if a user has access
+     * @param username User to check
+     * @return true if allowed
+     */
+    public boolean hasAccess(String username) {
+        return allowedUsers.contains(username);
     }
 
     // Getters
@@ -84,27 +141,31 @@ public class FileMetadata {
         return fileName;
     }
 
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public String getEncryptedSymmetricKey() {
-        return encryptedSymmetricKey;
-    }
-
     public String getFileHash() {
         return fileHash;
     }
 
-    public String getUploaderId() {
-        return uploaderId;
+    public long getFileSize() {
+        return fileSize;
+    }
+
+    public String getStorageFileName() {
+        return storageFileName;
+    }
+
+    public String getEncryptedKey() {
+        return encryptedKey;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public long getTimeStamp() {
+        return timeStamp;
     }
 
     public List<String> getAllowedUsers() {
-        return allowedUsers;
+        return new ArrayList<>(allowedUsers);
     }
 }

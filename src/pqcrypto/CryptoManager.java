@@ -47,7 +47,7 @@ public class CryptoManager {
 
         System.out.println("(CryptoManager.java) creating nonce cache...");
         // create nonce cache with config parameters
-        this.nonceCache = new NonceCache(config.getInt("protocol.nonce_size_bytes", 16), config.getInt("security.session_key_lifetime_mins", 60) * 60);
+        this.nonceCache = new NonceCache(this.config.getInt("protocol.nonce_size_bytes", 16), config.getInt("security.session_key_lifetime_mins", 60) * 60);
 
         // initalize session storage
         this.sessionKeys = new HashMap<>();
@@ -299,6 +299,14 @@ public class CryptoManager {
         sessionKeys.remove(sessionId);
     }
 
-
+    /**
+     * converts raw byte[] into a SecureKey object
+     * @param keyBytes
+     * @return
+     */
+    public SecretKey convertBytesToKey(byte[] keyBytes) {
+        System.out.println("CryptoMng: converting byte array to SecretKey");
+        return symCrypto.convertBytesToKey(keyBytes);
+    }
 
 }

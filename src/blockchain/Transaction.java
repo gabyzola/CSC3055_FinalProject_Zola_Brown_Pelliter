@@ -5,62 +5,148 @@ import merrimackutil.json.types.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.Base64;
 
+/**
+ * Represents a transaction in the blockchain
+ */
 public class Transaction {
-
     private String transactionId;
     private String uploaderId;
-    private String fileHash;
+    private String type;
+    private FileMetadata fileMetadata;
     private long timestamp;
-    private String signature; // base64-encoded signature of fileHash + timestamp + uploaderId
-    private FileMetadata metadata; // Holds encrypted file details and access control
+    private byte[] signature;
 
-
-    // Constructor
-    public Transaction(String uploaderId, String fileHash, String signature) throws Exception {
+    /**
+     * Constructor for a transaction
+     * @param uploaderId ID of the uploader
+     * @param type Type of transaction (UPLOAD, SHARE, etc.)
+     * @param fileMetadata Metadata of the file
+     * @param timestamp Timestamp of the transaction
+     * @throws NoSuchAlgorithmException If hash algorithm not available
+     */
+    public Transaction(String uploaderId, String type, FileMetadata fileMetadata, long timestamp) 
+            throws NoSuchAlgorithmException {
         this.uploaderId = uploaderId;
-        this.fileHash = fileHash;
-        this.timestamp = Instant.now().toEpochMilli();
-        this.signature = signature;
+        this.type = type;
+        this.fileMetadata = fileMetadata;
+        this.timestamp = timestamp;
         this.transactionId = computeTransactionId();
     }
 
-    // Computes transaction ID as SHA3-256 hash of uploaderId + fileHash + timestamp
+    /**
+     * Private constructor for deserialization
+     */
+    private Transaction() {
+    }
+
+    /**
+     * Computes transaction ID
+     * @return Transaction ID
+     * @throws NoSuchAlgorithmException If hash algorithm not available
+     */
     private String computeTransactionId() throws NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA3-256");
-        String input = uploaderId + fileHash + timestamp;
-        byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+        StringBuilder input = new StringBuilder()
+                .append(uploaderId)
+                .append(type)
+                .append(timestamp);
+        
+        if (fileMetadata != null) {
+            input.append(fileMetadata.getFileHash());
+        }
+        
+        byte[] hash = digest.digest(input.toString().getBytes(StandardCharsets.UTF_8));
         return Base64.getEncoder().encodeToString(hash);
     }
 
-    // Serialize to JSON
-    public JSONObject toJSON() {
+    /**
+     * Set the digital signature for the transaction
+     * @param signature The signature
+     */
+    public void setSignature(byte[] signature) {
+        this.signature = signature.clone();
+    }
+
+    /**
+     * Convert to JSONObject
+     * @return JSON representation
+     */
+    public JSONObject toJSONObject() {
         JSONObject obj = new JSONObject();
         obj.put("transactionId", transactionId);
         obj.put("uploaderId", uploaderId);
-        obj.put("fileHash", fileHash);
+        obj.put("type", type);
         obj.put("timestamp", timestamp);
-        obj.put("signature", signature);
+        
+        if (signature != null) {
+            obj.put("signature", Base64.getEncoder().encodeToString(signature));
+        }
+        
+        if (fileMetadata != null) {
+            obj.put("fileMetadata", fileMetadata.toJSONObject());
+        }
+        
         return obj;
     }
 
-    // Deserialize from JSON
-    public static Transaction fromJSON(String json) throws Exception {
-        JSONObject obj = new JSONObject();
+    /**
+     * Get data to sign
+     * @return Data to be signed
+     */
+    public byte[] getDataToSign() {
+        StringBuilder builder = new StringBuilder()
+                .append(transactionId)
+                .append(uploaderId)
+                .append(type)
+                .append(timestamp);
+        
+        if (fileMetadata != null) {
+            builder.append(fileMetadata.getFileHash());
+        }
+        
+        return builder.toString().getBytes(StandardCharsets.UTF_8);
+    }
 
-        String uploaderId = obj.getString("uploaderId");
-        String fileHash = obj.getString("fileHash");
-        String signature = obj.getString("signature");
-        long timestamp = ((Number) obj.get("timestamp")).longValue();
-        String transactionId = obj.getString("transactionId");
-
-        Transaction tx = new Transaction(uploaderId, fileHash, signature);
-        tx.timestamp = timestamp;
-        tx.transactionId = transactionId;
-
+    /**
+     * Deserialize from JSON
+     * @param jsonObj JSON object to deserialize
+     * @return Transaction object
+     * @throws Exception If deserialization fails
+     */
+    public static Transaction fromJSON(JSONObject jsonObj) throws Exception {
+        Transaction tx = new Transaction();
+        
+        tx.transactionId = jsonObj.getString("transactionId");
+        tx.uploaderId = jsonObj.getString("uploaderId");
+        tx.type = jsonObj.getString("type");
+        
+        Number timestamp = (Number) jsonObj.get("timestamp");
+        tx.timestamp = timestamp.longValue();
+        
+        String signatureStr = jsonObj.getString("signature");
+        if (signatureStr != null) {
+            tx.signature = Base64.getDecoder().decode(signatureStr);
+        }
+        
+        JSONObject metadataObj = jsonObj.getObject("fileMetadata");
+        if (metadataObj != null) {
+            tx.fileMetadata = FileMetadata.fromJSON(metadataObj);
+        }
+        
         return tx;
+    }
+
+    /**
+     * Validates the transaction
+     * @return true if valid
+     * @throws NoSuchAlgorithmException If hash algorithm not available
+     */
+    public boolean isValid() throws NoSuchAlgorithmException {
+        // Check transaction ID
+        String calculatedId = computeTransactionId();
+        return calculatedId.equals(transactionId);
     }
 
     // Getters
@@ -72,24 +158,19 @@ public class Transaction {
         return uploaderId;
     }
 
-    public String getFileHash() {
-        return fileHash;
+    public String getType() {
+        return type;
+    }
+
+    public FileMetadata getFileMetadata() {
+        return fileMetadata;
     }
 
     public long getTimestamp() {
         return timestamp;
     }
 
-    public String getSignature() {
-        return signature;
-    }
-
-    // (Optional) validate the transaction’s integrity
-    public boolean isValid() throws NoSuchAlgorithmException {
-        return computeTransactionId().equals(transactionId);
-    }
-
-    public FileMetadata getMetadata(){
-        return metadata;
+    public byte[] getSignature() {
+        return signature != null ? signature.clone() : null;
     }
 }

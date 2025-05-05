@@ -1,5 +1,8 @@
 package blockchain;
 
+import common.Config;
+import common.Constants;
+import merrimackutil.json.JsonIO;
 import merrimackutil.json.types.JSONArray;
 import merrimackutil.json.types.JSONObject;
 
@@ -8,149 +11,332 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * BlockchainManager manages a list of blocks containing file transactions.
- * It supports blockchain validation, JSON-based persistence, and querying.
+ * BlockchainManager maintains the blockchain ledger of file transactions.
+ * It supports transaction validation, block creation, and querying operations.
  */
 public class BlockchainManager {
     // In-memory blockchain ledger
     private final List<Block> blockchain;
-
-    // File path for saving/loading the blockchain to/from disk
-    private final String persistenceFile;
-
-    // Constructor initializes blockchain and sets the file for persistence
-    public BlockchainManager(String persistenceFile) {
-        this.persistenceFile = persistenceFile;
+    
+    // Pending transactions waiting to be added to a block
+    private final List<Transaction> pendingTransactions;
+    
+    // File path for saving/loading the blockchain from disk
+    private final String blockchainFile;
+    
+    // Maximum transactions per block
+    private final int maxBlockSize;
+    
+    // Cache for faster lookups
+    private final Map<String, Transaction> fileTransactionCache;
+    
+    /**
+     * Constructor that initializes blockchain from configuration
+     * @param config The system configuration
+     * @throws IOException If blockchain file cannot be read
+     */
+    public BlockchainManager(Config config) throws IOException {
+        this.blockchainFile = config.getString("storage.blockchain_file", Constants.BLOCKCHAIN_FILE);
+        this.maxBlockSize = config.getInt("blockchain.block_size_limit", Constants.BLOCKCHAIN_MAX_BLOCK_SIZE);
         this.blockchain = new ArrayList<>();
+        this.pendingTransactions = new ArrayList<>();
+        this.fileTransactionCache = new HashMap<>();
+        
+        loadBlockchain();
+        System.out.println("BlockchainManager: Initialized with " + blockchain.size() + " blocks");
     }
-
+    
     /**
-     * Load the blockchain from a JSON file if it exists.
-     * Validates each block's hash and linkage during load.
+     * Loads blockchain from file or creates genesis block if not exists
+     * @throws IOException If file operations fail
      */
-    public void load() throws Exception {
-        File file = new File(persistenceFile);
-        if (!file.exists()) return;
-
-        String json = Files.readString(file.toPath());
-        JSONArray arr = new JSONArray();
-
-        blockchain.clear();
-        for (int i = 0; i < arr.size(); i++) {
-            JSONObject blockJson = arr.getObject(i);
-            Block block = Block.fromJSON(blockJson.toString());
-
-            // Validate block linkage and hash integrity
-            String expectedPrev = (blockchain.isEmpty()) ? "GENESIS" : blockchain.get(blockchain.size() - 1).getBlockHash();
-            if (!validateBlock(block, expectedPrev)) {
-                throw new Exception("Blockchain corrupted at block index " + i);
+    private void loadBlockchain() throws IOException {
+        File file = new File(blockchainFile);
+        
+        // Create parent directories if they don't exist
+        file.getParentFile().mkdirs();
+        
+        if (!file.exists() || file.length() == 0) {
+            // Initialize with genesis block
+            System.out.println("BlockchainManager: Creating genesis block");
+            createGenesisBlock();
+            saveBlockchain();
+            return;
+        }
+        
+        try {
+            String json = Files.readString(file.toPath());
+            JSONObject root = JsonIO.readObject(json);
+            JSONArray blocksArray = root.getArray("blocks");
+            
+            if (blocksArray == null || blocksArray.size() == 0) {
+                createGenesisBlock();
+                return;
             }
-
-            blockchain.add(block);
+            
+            blockchain.clear();
+            String previousHash = Constants.GENESIS_BLOCK_HASH;
+            
+            for (int i = 0; i < blocksArray.size(); i++) {
+                JSONObject blockJson = blocksArray.getObject(i);
+                Block block = Block.fromJSON(blockJson);
+                
+                // Validate block linkage
+                if (!block.getPreviousHash().equals(previousHash)) {
+                    System.err.println("BlockchainManager: Blockchain corrupted - invalid block linkage at index " + i);
+                    throw new IOException("Blockchain integrity check failed");
+                }
+                
+                blockchain.add(block);
+                previousHash = block.getBlockHash();
+                
+                // Cache file transactions for faster lookup
+                for (Transaction tx : block.getTransactions()) {
+                    if (tx.getFileMetadata() != null) {
+                        fileTransactionCache.put(tx.getFileMetadata().getFileHash(), tx);
+                    }
+                }
+            }
+            
+            System.out.println("BlockchainManager: Loaded " + blockchain.size() + " blocks from " + blockchainFile);
+            
+        } catch (Exception e) {
+            System.err.println("BlockchainManager: Error loading blockchain: " + e.getMessage());
+            e.printStackTrace();
+            
+            // If loading fails, create a new blockchain
+            blockchain.clear();
+            createGenesisBlock();
+            saveBlockchain();
         }
     }
-
+    
     /**
-     * Save the current blockchain to a JSON file.
+     * Creates the genesis block for a new blockchain
      */
-    public void save() throws IOException {
-        JSONArray arr = new JSONArray();
+    private void createGenesisBlock() {
+        try {
+            blockchain.clear();
+            fileTransactionCache.clear();
+            
+            List<Transaction> emptyList = new ArrayList<>();
+            Block genesisBlock = new Block(Constants.GENESIS_BLOCK_HASH, emptyList);
+            blockchain.add(genesisBlock);
+            
+        } catch (Exception e) {
+            System.err.println("BlockchainManager: Failed to create genesis block: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Saves the current blockchain to file
+     * @throws IOException If file operations fail
+     */
+    private void saveBlockchain() throws IOException {
+        JSONObject root = new JSONObject();
+        JSONArray blocksArray = new JSONArray();
+        
         for (Block block : blockchain) {
-            arr.add(block.toJSON());
+            JSONObject blockJson = block.toJSONObject();
+            blocksArray.add(blockJson);
         }
-
-        try (FileWriter fw = new FileWriter(persistenceFile)) {
-            fw.write(arr.toString());
+        
+        root.put("blocks", blocksArray);
+        
+        // Write atomically
+        File tempFile = new File(blockchainFile + ".tmp");
+        try (FileWriter writer = new FileWriter(tempFile)) {
+            writer.write(root.toJSON());
+        }
+        
+        File destFile = new File(blockchainFile);
+        if (!tempFile.renameTo(destFile)) {
+            Files.copy(tempFile.toPath(), destFile.toPath());
+            tempFile.delete();
         }
     }
-
+    
     /**
-     * Add a new block to the blockchain after validating transactions and block integrity.
-     * This represents the consensus mechanism (append-only).
+     * Adds a transaction to the blockchain
+     * @param transaction The transaction to add
+     * @return true if successful
+     * @throws IOException If blockchain cannot be saved
      */
-    public boolean addBlock(List<Transaction> transactions) throws Exception {
-        // Ensure all transactions are valid
-        for (Transaction tx : transactions) {
-            if (!tx.isValid()) return false;
+    public synchronized boolean addTransaction(Transaction transaction) throws IOException {
+        if (transaction == null || transaction.getFileMetadata() == null) {
+            return false;
         }
-
-        // Use last block’s hash or “GENESIS” if first block
-        String previousHash = blockchain.isEmpty() ? "GENESIS" : blockchain.get(blockchain.size() - 1).getBlockHash();
-
-        // Create and validate the new block
-        Block newBlock = new Block(previousHash, transactions);
-        if (!validateBlock(newBlock, previousHash)) return false;
-
-        // Add to blockchain and persist to file
-        blockchain.add(newBlock);
-        save();
+        
+        // Validate the transaction
+        try {
+            if (!transaction.isValid()) {
+                System.err.println("BlockchainManager: Invalid transaction");
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println("BlockchainManager: Error validating transaction: " + e.getMessage());
+            return false;
+        }
+        
+        // Add to pending transactions
+        pendingTransactions.add(transaction);
+        
+        // If we have enough transactions, create a new block
+        if (pendingTransactions.size() >= maxBlockSize) {
+            return createNewBlock();
+        }
+        
         return true;
     }
-
+    
     /**
-     * Validates a block by checking previous hash match and hash integrity.
+     * Creates a new block with pending transactions
+     * @return true if successful
+     * @throws IOException If blockchain cannot be saved
      */
-    private boolean validateBlock(Block block, String expectedPreviousHash) throws Exception {
-        return block.isValid(expectedPreviousHash);
+    public synchronized boolean createNewBlock() throws IOException {
+        if (pendingTransactions.isEmpty()) {
+            return true;
+        }
+        
+        try {
+            // Get the last block's hash
+            String lastHash = blockchain.isEmpty() ? 
+                Constants.GENESIS_BLOCK_HASH : 
+                blockchain.get(blockchain.size() - 1).getBlockHash();
+            
+            // Create a new block with current transactions
+            List<Transaction> blockTransactions = new ArrayList<>(pendingTransactions);
+            Block newBlock = new Block(lastHash, blockTransactions);
+            
+            // Add to blockchain
+            blockchain.add(newBlock);
+            
+            // Update cache
+            for (Transaction tx : blockTransactions) {
+                if (tx.getFileMetadata() != null) {
+                    fileTransactionCache.put(tx.getFileMetadata().getFileHash(), tx);
+                }
+            }
+            
+            // Clear pending transactions
+            pendingTransactions.clear();
+            
+            // Save to disk
+            saveBlockchain();
+            
+            System.out.println("BlockchainManager: Added new block " + newBlock.getBlockHash() + 
+                              " with " + blockTransactions.size() + " transactions");
+            
+            return true;
+        } catch (Exception e) {
+            System.err.println("BlockchainManager: Error creating new block: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
-
+    
     /**
-     * Search for a transaction by file hash.
-     * Returns the first match found or null.
+     * Checks if a file exists in the blockchain
+     * @param fileHash The file hash to check
+     * @return true if the file exists
      */
-    public Transaction findTransactionByFileHash(String targetFileHash) {
+    public boolean fileExists(String fileHash) {
+        return fileTransactionCache.containsKey(fileHash);
+    }
+    
+    /**
+     * Finds the latest transaction for a file
+     * @param fileHash The file hash to search for
+     * @return The latest transaction or null if not found
+     */
+    public Transaction findLatestFileTransaction(String fileHash) {
+        return fileTransactionCache.get(fileHash);
+    }
+    
+    /**
+     * Gets all file transactions
+     * @return List of all file transactions
+     */
+    public List<Transaction> getAllFileTransactions() {
+        return new ArrayList<>(fileTransactionCache.values());
+    }
+    
+    /**
+     * Gets all blocks in the blockchain
+     * @return List of all blocks
+     */
+    public List<Block> getAllBlocks() {
+        return new ArrayList<>(blockchain);
+    }
+    
+    /**
+     * Gets a block by its hash
+     * @param blockHash The block hash
+     * @return The block or null if not found
+     */
+    public Block getBlockByHash(String blockHash) {
+        for (Block block : blockchain) {
+            if (block.getBlockHash().equals(blockHash)) {
+                return block;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Gets a transaction by its hash
+     * @param transactionHash The transaction hash
+     * @return The transaction or null if not found
+     */
+    public Transaction getTransactionByHash(String transactionHash) {
         for (Block block : blockchain) {
             for (Transaction tx : block.getTransactions()) {
-                FileMetadata meta = tx.getMetadata();
-                if (meta.getFileHash().equals(targetFileHash)) {
+                if (tx.getTransactionId().equals(transactionHash)) {
                     return tx;
                 }
             }
         }
         return null;
     }
-
+    
     /**
-     * Search for all transactions related to a specific user (uploader or allowed user).
+     * Gets all transactions for a file
+     * @param fileHash The file hash
+     * @return List of transactions for the file
      */
-    public List<Transaction> findTransactionsByUser(String userId) {
-        List<Transaction> results = new ArrayList<>();
+    public List<Transaction> getFileTransactions(String fileHash) {
+        List<Transaction> result = new ArrayList<>();
         for (Block block : blockchain) {
             for (Transaction tx : block.getTransactions()) {
-                FileMetadata meta = tx.getMetadata();
-                if (meta.getUploaderId().equals(userId) || meta.getAllowedUsers().contains(userId)) {
-                    results.add(tx);
+                if (tx.getFileMetadata() != null && 
+                    tx.getFileMetadata().getFileHash().equals(fileHash)) {
+                    result.add(tx);
                 }
             }
         }
-        return results;
+        return result;
     }
-
+    
     /**
-     * Check whether a user has permission to access a file based on its hash.
+     * Gets all transactions for a user
+     * @param username The username
+     * @return List of transactions for the user
      */
-    public boolean userHasAccess(String userId, String fileHash) {
-        Transaction tx = findTransactionByFileHash(fileHash);
-        if (tx == null) return false;
-
-        FileMetadata meta = tx.getMetadata();
-        return meta.getUploaderId().equals(userId) || meta.getAllowedUsers().contains(userId);
-    }
-
-    /**
-     * Get the number of blocks in the blockchain.
-     */
-    public int getChainLength() {
-        return blockchain.size();
-    }
-
-    /**
-     * Get a read-only copy of the current blockchain.
-     */
-    public List<Block> getBlockchain() {
-        return new ArrayList<>(blockchain); // Defensive copy
+    public List<Transaction> getUserTransactions(String username) {
+        List<Transaction> result = new ArrayList<>();
+        for (Block block : blockchain) {
+            for (Transaction tx : block.getTransactions()) {
+                if (tx.getUploaderId().equals(username)) {
+                    result.add(tx);
+                }
+            }
+        }
+        return result;
     }
 }

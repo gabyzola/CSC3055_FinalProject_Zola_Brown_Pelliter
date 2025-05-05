@@ -3,7 +3,6 @@ package blockchain;
 import merrimackutil.json.types.JSONArray;
 import merrimackutil.json.types.JSONObject;
 
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -12,43 +11,74 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
+/**
+ * Represents a block in the blockchain containing transactions
+ */
 public class Block {
     private String previousHash;
     private String blockHash;
     private long timestamp;
     private List<Transaction> transactions;
 
-    // Constructor to create a new block
+    /**
+     * Constructor to create a new block
+     * @param previousHash Hash of the previous block
+     * @param transactions List of transactions in this block
+     * @throws Exception If block creation fails
+     */
     public Block(String previousHash, List<Transaction> transactions) throws Exception {
         this.previousHash = previousHash;
-        this.timestamp = Instant.now().toEpochMilli();
-        this.transactions = transactions;
-        this.blockHash = calculateHash(); // Use SHA3-256 for post-quantum-safe hashing
+        this.timestamp = Instant.now().getEpochSecond();
+        this.transactions = new ArrayList<>(transactions);
+        this.blockHash = calculateHash();
     }
 
-    // Calculate block hash using SHA3-256 for quantum-resistant security
+    /**
+     * Private constructor for deserialization
+     */
+    private Block() {
+        this.transactions = new ArrayList<>();
+    }
+
+    /**
+     * Calculate block hash using SHA3-256
+     * @return Hash of the block
+     * @throws NoSuchAlgorithmException If hashing algorithm is not available
+     */
     private String calculateHash() throws NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA3-256");
-        StringBuilder input = new StringBuilder(previousHash)
+        StringBuilder input = new StringBuilder()
+                .append(previousHash)
                 .append(timestamp);
+        
         for (Transaction tx : transactions) {
-            input.append(tx.toJSON());
+            input.append(tx.getTransactionId());
         }
+        
         byte[] hashBytes = digest.digest(input.toString().getBytes(StandardCharsets.UTF_8));
         return Base64.getEncoder().encodeToString(hashBytes);
     }
 
-    // Validate the block against the previous hash and recalculate the hash
+    /**
+     * Validates this block
+     * @param expectedPreviousHash Expected previous hash
+     * @return true if valid
+     * @throws Exception If validation fails
+     */
     public boolean isValid(String expectedPreviousHash) throws Exception {
         if (!this.previousHash.equals(expectedPreviousHash)) {
             return false;
         }
+        
         String recalculated = calculateHash();
         return recalculated.equals(this.blockHash);
     }
 
-    // Serialize the block to a JSON string
-    public String toJSON() {
+    /**
+     * Converts block to JSONObject
+     * @return JSON representation
+     */
+    public JSONObject toJSONObject() {
         JSONObject obj = new JSONObject();
         obj.put("previousHash", previousHash);
         obj.put("blockHash", blockHash);
@@ -56,34 +86,40 @@ public class Block {
 
         JSONArray txArray = new JSONArray();
         for (Transaction tx : transactions) {
-            txArray.add(new JSONObject());
+            txArray.add(tx.toJSONObject());
         }
         obj.put("transactions", txArray);
-        return obj.toString(); // Pretty-print with indentation
+        return obj;
     }
 
-    // Deserialize a Block object from a JSON string
-    public static Block fromJSON(String json) throws Exception {
-        JSONObject obj = new JSONObject();
-        String previousHash = obj.getString("previousHash");
-        long timestamp;
+    /**
+     * Deserialize from JSON
+     * @param jsonObj JSON object to deserialize
+     * @return Block object
+     * @throws Exception If deserialization fails
+     */
+    public static Block fromJSON(JSONObject jsonObj) throws Exception {
+        Block block = new Block();
+        
+        block.previousHash = jsonObj.getString("previousHash");
+        block.blockHash = jsonObj.getString("blockHash");
+        
         try {
-            timestamp = ((Number) obj.get("timestamp")).longValue();
+            Number timestamp = (Number) jsonObj.get("timestamp");
+            block.timestamp = timestamp.longValue();
         } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        }
-        JSONArray txArray = obj.getArray("transactions");
-
-        List<Transaction> txList = new ArrayList<>();
-        for (int i = 0; i < txArray.size(); i++) {
-            JSONObject txJson = txArray.getObject(i);
-            txList.add(Transaction.fromJSON(txJson.toString()));
+            throw new Exception("Invalid block timestamp: " + e.getMessage());
         }
 
-        Block block = new Block(previousHash, txList);
-        block.timestamp = timestamp;
-        block.blockHash = obj.getString("blockHash"); // Override to match saved hash
+        JSONArray txArray = jsonObj.getArray("transactions");
+        if (txArray != null) {
+            for (int i = 0; i < txArray.size(); i++) {
+                JSONObject txJson = txArray.getObject(i);
+                Transaction tx = Transaction.fromJSON(txJson);
+                block.transactions.add(tx);
+            }
+        }
+
         return block;
     }
 
@@ -101,6 +137,6 @@ public class Block {
     }
 
     public List<Transaction> getTransactions() {
-        return transactions;
+        return new ArrayList<>(transactions);
     }
 }
