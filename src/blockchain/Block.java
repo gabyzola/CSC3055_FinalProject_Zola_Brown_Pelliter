@@ -70,7 +70,13 @@ public class Block {
     public static Block fromJSON(String json) throws Exception {
         JSONObject obj = new JSONObject();
         String previousHash = obj.getString("previousHash");
-        long timestamp = obj.getLong(timestamp);
+        long timestamp;
+        try {
+            timestamp = ((Number) obj.get("timestamp")).longValue();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        }
         JSONArray txArray = obj.getArray("transactions");
 
         List<Transaction> txList = new ArrayList<>();
