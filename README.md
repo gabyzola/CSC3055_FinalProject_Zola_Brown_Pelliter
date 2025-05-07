@@ -34,6 +34,7 @@ This will create two JAR files in the dist directory:
 * client.jar - The client application
 
 ## Usage
+IF YOU'D LIKE A QUICKER, MORE SURFACE LEVEL TEST, USE THE VERSION FROM THE 3RD TO LAST COMMIT, IT CONTAINS HARDCODED VALES THAT MAKE THE PROCESS MORE SEAMLESS, OTHERWISE USE THE MOST RECENT VERSION
 
 ### Starting the Server
 ```
