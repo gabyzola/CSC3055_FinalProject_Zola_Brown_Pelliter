@@ -112,17 +112,23 @@ public class Client {
      * Handle user registration
      */
     private void handleRegister() throws Exception {
-        // For testing purposes, use a hardcoded password to avoid console input issues
-        // System.out.print("Enter password: ");
-        // String password = new String(System.console().readPassword());
-        String password = "testPassword12345";
-        System.out.println("Using test password: " + password);
+        // Get password from user
+        System.out.print("Enter password: ");
+        String password;
         
-        // For testing, bypass password length check
-        // if (password.length() < 8) {
-        //     System.err.println("Password must be at least 8 characters");
-        //     return;
-        // }
+        // Try to use System.console first for secure password entry
+        if (System.console() != null) {
+            password = new String(System.console().readPassword());
+        } else {
+            // Fallback to scanner if console is not available (like in some IDEs)
+            password = scanner.nextLine();
+        }
+        
+        // Check password length
+        if (password.length() < 8) {
+            System.err.println("Password must be at least 8 characters");
+            return;
+        }
         
         // Generate key pairs
         cryptoManager.generateKeyPairs();
@@ -164,16 +170,21 @@ public class Client {
      * @return true if authentication is successful
      */
     private boolean authenticate() throws Exception {
-        // For testing purposes, use hardcoded password and TOTP
-        // System.out.print("Enter password: ");
-        // String password = new String(System.console().readPassword());
-        String password = "testPassword12345";
-        System.out.println("Using test password: " + password);
+        // Get password from user
+        System.out.print("Enter password: ");
+        String password;
         
-        // System.out.print("Enter OTP: ");
-        // String totpCode = scanner.nextLine();
-        String totpCode = "123456"; // Using static TOTP for testing
-        System.out.println("Using test TOTP code: " + totpCode);
+        // Try to use System.console first for secure password entry
+        if (System.console() != null) {
+            password = new String(System.console().readPassword());
+        } else {
+            // Fallback to scanner if console is not available (like in some IDEs)
+            password = scanner.nextLine();
+        }
+        
+        // Get TOTP code from user
+        System.out.print("Enter OTP: ");
+        String totpCode = scanner.nextLine();
         
         Message response = networkManager.authenticate(options.getUsername(), password, totpCode);
         

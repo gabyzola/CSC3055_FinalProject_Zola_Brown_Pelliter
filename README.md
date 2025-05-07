@@ -22,6 +22,8 @@ Mike Brown : common : pqcrypto
 * Google Authenticator or FreeOTP app for 2FA
 
 ## Building the Project
+Copy the src, lib, and test-files (literally the folder named "test-files" and the txt file in it) into your directory (the rest can stay)
+
 Use the included build.xml to compile the project:
 ```
 ant or ant dist
