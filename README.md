@@ -1,6 +1,11 @@
 # Post-Quantum Blockchain File Sharing System
 A secure file sharing system using post-quantum cryptography algorithms (CRYSTALS-Kyber and CRYSTALS-Dilithium) with blockchain-based transaction ledger.
 
+## Team
+Gaby Zola : client 
+Jack Pelitier : blockchain
+Mike Brown : common : pqcrypto
+
 ## Features
 
 * Post-quantum secure key exchange using CRYSTALS-Kyber
