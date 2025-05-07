@@ -1,142 +1,274 @@
 package blockchain;
 
-import merrimackutil.json.types.JSONArray;
-import merrimackutil.json.types.JSONObject;
-
-import java.nio.charset.StandardCharsets;
+import java.io.InvalidObjectException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
-/**
- * Represents a block in the blockchain containing transactions
- */
-public class Block {
-    private String previousHash;
-    private String blockHash;
-    private long timestamp;
-    private List<Transaction> transactions;
+import merrimackutil.json.JSONSerializable;
+import merrimackutil.json.types.JSONArray;
+import merrimackutil.json.types.JSONObject;
+import merrimackutil.json.types.JSONType;
 
+import common.Constants;
+
+/**
+ * Represents a block in the blockchain containing multiple transactions.
+ */
+public class Block implements JSONSerializable {
+    private int index;
+    private String timestamp;
+    private String previousHash;
+    private String hash;
+    private List<Transaction> transactions;
+    
     /**
-     * Constructor to create a new block
+     * Creates a new block
+     * 
+     * @param index The block index (0 for genesis)
      * @param previousHash Hash of the previous block
      * @param transactions List of transactions in this block
-     * @throws Exception If block creation fails
      */
-    public Block(String previousHash, List<Transaction> transactions) throws Exception {
+    public Block(int index, String previousHash, List<Transaction> transactions) {
+        this.index = index;
+        this.timestamp = Instant.now().toString();
         this.previousHash = previousHash;
-        this.timestamp = Instant.now().getEpochSecond();
-        this.transactions = new ArrayList<>(transactions);
-        this.blockHash = calculateHash();
+        this.transactions = transactions;
+        this.hash = calculateHash();
     }
-
+    
     /**
-     * Private constructor for deserialization
+     * Creates a new genesis block
+     * 
+     * @return The genesis block
      */
-    private Block() {
-        this.transactions = new ArrayList<>();
+    public static Block createGenesisBlock() {
+        return new Block(0, Constants.GENESIS_BLOCK_HASH, new ArrayList<>());
     }
-
+    
     /**
-     * Calculate block hash using SHA3-256
-     * @return Hash of the block
-     * @throws NoSuchAlgorithmException If hashing algorithm is not available
+     * Creates a block from a JSON object
+     * 
+     * @param json JSONObject containing block data
+     * @throws InvalidObjectException If JSON is invalid
      */
-    private String calculateHash() throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA3-256");
-        StringBuilder input = new StringBuilder()
-                .append(previousHash)
-                .append(timestamp);
-        
-        for (Transaction tx : transactions) {
-            input.append(tx.getTransactionId());
-        }
-        
-        byte[] hashBytes = digest.digest(input.toString().getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(hashBytes);
+    public Block(JSONObject json) throws InvalidObjectException {
+        deserialize(json);
     }
-
+    
     /**
-     * Validates this block
-     * @param expectedPreviousHash Expected previous hash
-     * @return true if valid
-     * @throws Exception If validation fails
+     * Get the block index
+     * 
+     * @return Block index
      */
-    public boolean isValid(String expectedPreviousHash) throws Exception {
-        if (!this.previousHash.equals(expectedPreviousHash)) {
-            return false;
-        }
-        
-        String recalculated = calculateHash();
-        return recalculated.equals(this.blockHash);
+    public int getIndex() {
+        return index;
     }
-
+    
     /**
-     * Converts block to JSONObject
-     * @return JSON representation
+     * Get the block timestamp
+     * 
+     * @return ISO-8601 timestamp
      */
-    public JSONObject toJSONObject() {
-        JSONObject obj = new JSONObject();
-        obj.put("previousHash", previousHash);
-        obj.put("blockHash", blockHash);
-        obj.put("timestamp", timestamp);
-
-        JSONArray txArray = new JSONArray();
-        for (Transaction tx : transactions) {
-            txArray.add(tx.toJSONObject());
-        }
-        obj.put("transactions", txArray);
-        return obj;
+    public String getTimestamp() {
+        return timestamp;
     }
-
+    
     /**
-     * Deserialize from JSON
-     * @param jsonObj JSON object to deserialize
-     * @return Block object
-     * @throws Exception If deserialization fails
+     * Get the previous block hash
+     * 
+     * @return Base64-encoded hash
      */
-    public static Block fromJSON(JSONObject jsonObj) throws Exception {
-        Block block = new Block();
-        
-        block.previousHash = jsonObj.getString("previousHash");
-        block.blockHash = jsonObj.getString("blockHash");
-        
-        try {
-            Number timestamp = (Number) jsonObj.get("timestamp");
-            block.timestamp = timestamp.longValue();
-        } catch (Exception e) {
-            throw new Exception("Invalid block timestamp: " + e.getMessage());
-        }
-
-        JSONArray txArray = jsonObj.getArray("transactions");
-        if (txArray != null) {
-            for (int i = 0; i < txArray.size(); i++) {
-                JSONObject txJson = txArray.getObject(i);
-                Transaction tx = Transaction.fromJSON(txJson);
-                block.transactions.add(tx);
-            }
-        }
-
-        return block;
-    }
-
-    // Getters
     public String getPreviousHash() {
         return previousHash;
     }
-
-    public String getBlockHash() {
-        return blockHash;
+    
+    /**
+     * Get the block hash
+     * 
+     * @return Base64-encoded hash
+     */
+    public String getHash() {
+        return hash;
     }
-
-    public long getTimestamp() {
-        return timestamp;
-    }
-
+    
+    /**
+     * Get the transactions in this block
+     * 
+     * @return List of transactions
+     */
     public List<Transaction> getTransactions() {
-        return new ArrayList<>(transactions);
+        return transactions;
+    }
+    
+    /**
+     * Add a transaction to this block
+     * 
+     * @param transaction The transaction to add
+     * @return true if successful, false if block is full
+     */
+    public boolean addTransaction(Transaction transaction) {
+        if (transactions.size() >= Constants.BLOCK_SIZE_LIMIT) {
+            return false;
+        }
+        
+        transactions.add(transaction);
+        this.hash = calculateHash();
+        return true;
+    }
+    
+    /**
+     * Calculate the hash of this block
+     * 
+     * @return Base64-encoded SHA3-512 hash
+     */
+    public String calculateHash() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(Constants.HASH_ALGORITHM);
+            
+            // Include all block data in hash
+            String data = index + timestamp + previousHash + getTransactionsString();
+            byte[] hashBytes = digest.digest(data.getBytes());
+            
+            return Base64.getEncoder().encodeToString(hashBytes);
+        } catch (Exception e) {
+            throw new RuntimeException("Error calculating block hash", e);
+        }
+    }
+    
+    /**
+     * Validate the block's hash
+     * 
+     * @return true if the hash is valid
+     */
+    public boolean isValid() {
+        return hash.equals(calculateHash());
+    }
+    
+    /**
+     * Get transactions as a string for hashing
+     * 
+     * @return String representation of transactions
+     */
+    private String getTransactionsString() {
+        StringBuilder sb = new StringBuilder();
+        for (Transaction tx : transactions) {
+            sb.append(tx.serialize());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public JSONType toJSONType() {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("index", index);
+            
+            if (timestamp == null) {
+                timestamp = Instant.now().toString();  // Use current time if null
+                System.out.println("Warning: Block had null timestamp, using current time");
+            }
+            json.put("timestamp", timestamp);
+            
+            if (previousHash == null) {
+                previousHash = Constants.GENESIS_BLOCK_HASH;  // Use genesis hash if null
+                System.out.println("Warning: Block had null previousHash, using genesis hash");
+            }
+            json.put("previousHash", previousHash);
+            
+            if (hash == null) {
+                hash = calculateHash();  // Recalculate if null
+                System.out.println("Warning: Block had null hash, recalculating");
+            }
+            json.put("hash", hash);
+            
+            JSONArray txArray = new JSONArray();
+            if (transactions != null) {
+                for (Transaction tx : transactions) {
+                    if (tx != null) {
+                        try {
+                            JSONType txJson = tx.toJSONType();
+                            if (txJson != null) {
+                                txArray.add(txJson);
+                            } else {
+                                System.err.println("Warning: Transaction returned null JSON");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error converting transaction to JSON: " + e.getMessage());
+                        }
+                    } else {
+                        System.err.println("Warning: Null transaction in block");
+                    }
+                }
+            } else {
+                transactions = new ArrayList<>();  // Initialize if null
+                System.err.println("Warning: Block had null transactions list");
+            }
+            json.put("transactions", txArray);
+            
+            return json;
+        } catch (Exception e) {
+            System.err.println("Error in Block.toJSONType: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Return a minimal valid block JSON as fallback
+            JSONObject fallback = new JSONObject();
+            fallback.put("index", index);
+            fallback.put("timestamp", Instant.now().toString());
+            fallback.put("previousHash", Constants.GENESIS_BLOCK_HASH);
+            fallback.put("hash", "INVALID_HASH");
+            fallback.put("transactions", new JSONArray());
+            return fallback;
+        }
+    }
+
+    @Override
+    public void deserialize(JSONType obj) throws InvalidObjectException {
+        if (!(obj instanceof JSONObject)) {
+            throw new InvalidObjectException("Expected JSONObject for Block");
+        }
+        
+        JSONObject json = (JSONObject) obj;
+        
+        // Validate required fields
+        String[] requiredFields = {"index", "timestamp", "previousHash", "hash", "transactions"};
+        for (String field : requiredFields) {
+            if (!json.containsKey(field)) {
+                throw new InvalidObjectException("Missing required field: " + field);
+            }
+        }
+        
+        // Handle index more robustly
+        Object indexObj = json.get("index");
+        if (indexObj == null) {
+            throw new InvalidObjectException("index is null");
+        }
+        
+        if (indexObj instanceof Number) {
+            this.index = ((Number) indexObj).intValue();
+        } else {
+            try {
+                this.index = Integer.parseInt(indexObj.toString());
+            } catch (NumberFormatException e) {
+                throw new InvalidObjectException("Invalid index format: " + indexObj);
+            }
+        }
+        
+        this.timestamp = json.getString("timestamp");
+        this.previousHash = json.getString("previousHash");
+        this.hash = json.getString("hash");
+        
+        this.transactions = new ArrayList<>();
+        JSONArray txArray = json.getArray("transactions");
+        for (int i = 0; i < txArray.size(); i++) {
+            this.transactions.add(new Transaction(txArray.getObject(i)));
+        }
+    }
+    
+    @Override
+    public String serialize() {
+        return toJSONType().toJSON();
     }
 }

@@ -36,29 +36,24 @@ public class KyberOperations {
      */
     public KeyPair generateKeyPair() throws GeneralSecurityException {
     
-        System.out.println("(KyberOperations.java) generating key pair--------------");
-    
+        System.out.println("Generating Key Pair");
         // get kyber key pair generator 
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("Kyber", "BCPQC");
-        System.out.println("(KyberOperations.java) set instance");
         // initialize with Kyber 1024 parameters and secure random
         keyGen.initialize(KYBER_PARAMS, secureRandom);
-        System.out.println("(KyberOperations.java) initialized for generation, generating and returnign");
         return keyGen.generateKeyPair();
     }
 
     public SecretKeyWithEncapsulation encapsulateWithSecret(PublicKey publicKey) throws GeneralSecurityException {
-        System.out.println("(KyberOperations) encapsulating with secret---------------");
 
         KeyGenerator keyGen = KeyGenerator.getInstance("Kyber", "BCPQC");
-        System.out.println("KyberOps: instance set");
         
         keyGen.init(new KEMGenerateSpec(publicKey, "AES"), secureRandom);
-        System.out.println("KyberOps: initialized");
 
         // cast directly to SecretKeyWithEncaps... to get both key and encapsulation 
         SecretKeyWithEncapsulation result = (SecretKeyWithEncapsulation) keyGen.generateKey();
-        System.out.println("KyberOps: generated key and encapsulation");
+
+        System.out.println("Key Pai Generated...Returning");
 
         return result; 
     }
@@ -72,14 +67,13 @@ public class KyberOperations {
      */
     public byte[] encapsulate(PublicKey publicKey) throws GeneralSecurityException {
 
-        System.out.println("(KyberOperations.java) encapsulating-----------------");
-        
+        System.out.println("Encapsulating Key");
+
         KeyGenerator keyGen = KeyGenerator.getInstance("Kyber", "BCPQC"); // KEM generator for encapsulation
-        System.out.println("(KyberOperations.java) instance set");
         keyGen.init(new KEMGenerateSpec(publicKey, "AES"), secureRandom); // inititialize with public key
-        System.out.println("(KyberOperations.java) initialized");
         SecretKeyWithEncapsulation secKey = (SecretKeyWithEncapsulation) keyGen.generateKey(); // generate
-        System.out.println("(KyberOperations.java) generated, getting and returning encapsulated key");
+
+        System.out.println("Key Encapsulated");
 
         return secKey.getEncapsulation();
     }
@@ -94,14 +88,13 @@ public class KyberOperations {
      */
     public byte[] decapsulate(PrivateKey privateKey, byte[] ciphertext) throws GeneralSecurityException {
 
-        System.out.println("(KyberOperations.java) decapsulating---------------");
+        System.out.println("De-capsulating Key");
 
         KeyGenerator keyGen = KeyGenerator.getInstance("Kyber", "BCPQC"); // extractor 
-        System.out.println("(KyberOperations.java) instance set");
         keyGen.init(new KEMExtractSpec(privateKey, ciphertext, "AES")); // initialize with private key and ciphertext (encapsulated public key)
-        System.out.println("(KyberOperations.java) initialized");
         SecretKey secretKey = keyGen.generateKey(); // extract
-        System.out.println("(KyberOperations.java) generated, getting and returning decapsulated key");
+
+        System.out.println("Key De-capsulated");
 
         return secretKey.getEncoded(); 
     }

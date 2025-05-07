@@ -22,7 +22,6 @@ public class DilithiumOperations {
         
         this.secureRandom = new SecureRandom();
         Security.addProvider(new BouncyCastlePQCProvider());
-        System.out.println("(DilithiumOperations.java) constructor set");
     }
 
     /**
@@ -35,17 +34,14 @@ public class DilithiumOperations {
      */
     public KeyPair generateKeyPair() throws GeneralSecurityException {
 
-        System.out.println("(DilithiumOperations.java key gen processing----------------)");
-       
+        System.out.println("Generating Key Pair");
         // dilithium key pair generator
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance("Dilithium", "BCPQC");
-        System.out.println("(DilithiumOperations.java) got the instance");
 
         // initialize with dilithium5 parameters and secure random
         keyGen.initialize(DILITHIUM_PARAMS, secureRandom);
-        System.out.println("(DilithiumOperations.java) initialized generation");
 
-        System.out.println("(DilithiumOperations.java) generating and returning key pair");
+        System.out.println("Key Pair Generated");
         // generate and return keypair
         return keyGen.generateKeyPair();
     }
@@ -59,36 +55,38 @@ public class DilithiumOperations {
      */
     public byte[] sign(PrivateKey privateKey, byte[] message) throws GeneralSecurityException {
 
-        System.out.println("(DilithiumOperations.java) signing---------------");
+        System.out.println("Signing");
 
         // signature instance using Dilithium algorithm
         Signature signature = Signature.getInstance("Dilithium", "BCPQC");
-        System.out.println("(DilithiumOperations.java) got the instance");
 
         // initialize for signing with the private key
         signature.initSign(privateKey, secureRandom);
-        System.out.println("(DilithiumOperations.java) initialized signing ");
+
         // update with the message to sign
         signature.update(message);
-        System.out.println("(DilithiumOperations.java) updated with message, signing and returning");
+       
+        System.out.println("Signed");
+
         return signature.sign();
         
     }
 
     public boolean verify(PublicKey publicKey, byte[] message, byte[] signature) throws GeneralSecurityException {
 
-        System.out.println("(DilithiumOperations.java) verifying---------------");
+        System.out.println("Verifying");
 
         // signature instance...
         Signature verifier = Signature.getInstance("Dilithium", "BCPQC");
     
         // initialize for verification with the public key
         verifier.initVerify(publicKey); 
-        System.out.println("(DilithiumOperations.java) initialized verification");
 
         // update...
         verifier.update(message);
-        System.out.println("(DilithiumOperations.java) updated with message, verifying and returning");
+
+        System.out.println("Verified");
+
         return verifier.verify(signature);
     }
 

@@ -1,5 +1,6 @@
 package common;
 
+import java.io.InvalidObjectException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -9,253 +10,192 @@ import merrimackutil.json.JSONSerializable;
 import merrimackutil.json.types.JSONObject;
 import merrimackutil.json.types.JSONType;
 
-import java.io.InvalidObjectException;
-
 /**
- * represents a user within the system
- * stores credentials, authentication data, password verification and TOTP secret management
+ * Represents a user in the system with authentication details.
  */
 public class User implements JSONSerializable {
-    
-    // core user information
     private String username;
     private String passwordHash;
-    private String salt; 
+    private String passwordSalt;
     private String totpSecret;
-
-    // optional public keys for cryptographic operations
-    private byte[] kyberPublicKey;
-    private byte[] dilithiumPublicKey;
-
-    // user status and permissions
-    private boolean isActive;
-    private String role;
-
+    private String kyberPublicKey;
+    private String dilithiumPublicKey;
+    
     /**
-     * constructor, 
-     * automatically hashes the password and generates a TOTP secret 
-     * @param username
-     * @param password
-     * @throws NoSuchAlgorithmException
-     */
-    public User(String username, String password) throws NoSuchAlgorithmException {
-        this.username = username;
-        this.salt = generateSalt();
-        this.passwordHash = hashPassword(password, salt);
-        this.totpSecret = generateTotpSecret();
-        this.isActive = true;
-        this.role = "user"; // default role
-    }
-
-    /**
-     * creates a user from JSON data (used for deserialization)
-     * @param obj
-     * @throws InvalidObjectException
+     * Create a new user from JSON
+     * 
+     * @param obj JSONObject containing user data
+     * @throws InvalidObjectException If JSON structure is invalid
      */
     public User(JSONObject obj) throws InvalidObjectException {
         deserialize(obj);
     }
-
+    
     /**
-     * gets the username
-     * @return
+     * Create a new user with the given details
+     * 
+     * @param username The username
+     * @param password The plaintext password
+     * @throws NoSuchAlgorithmException If SHA-512 is not available
+     */
+    public User(String username, String password) throws NoSuchAlgorithmException {
+        this.username = username;
+        this.passwordSalt = generateSalt();
+        this.passwordHash = hashPassword(password, this.passwordSalt);
+        this.totpSecret = generateTotpSecret();
+    }
+    
+    /**
+     * Get the username
+     * 
+     * @return The username
      */
     public String getUsername() {
-        return this.username; 
+        return username;
     }
-
+    
     /**
-     * gets the TOTP secret for this user
-     * @return
+     * Get the TOTP secret
+     * 
+     * @return Base32 encoded TOTP secret
      */
     public String getTotpSecret() {
-        return this.totpSecret;
+        return totpSecret;
     }
-
+    
     /**
-     * sets new TOTP secret for this user
-     * @param totpSecret
+     * Get the Kyber public key
+     * 
+     * @return Base64 encoded Kyber public key
      */
-    public void setTotpSecret(String totpSecret) {
-        this.totpSecret = totpSecret;
+    public String getKyberPublicKey() {
+        return kyberPublicKey;
     }
-
+    
     /**
-     * checks if the provided password matches the stored hash
-     * @param candidatePassword
-     * @return
-     * @throws NoSuchAlgorithmException
+     * Set the Kyber public key
+     * 
+     * @param kyberPublicKey Base64 encoded Kyber public key
      */
-    public boolean verifyPassword(String candidatePassword) throws NoSuchAlgorithmException {
-        String candidateHash = hashPassword(candidatePassword, this.salt);
-        return candidateHash.equals(this.passwordHash);
-    }
-
-    /**
-     * sets a new password
-     * @param newPassword
-     * @throws NoSuchAlgorithmException
-     */
-    public void setPassword(String newPassword) throws NoSuchAlgorithmException {
-        this.salt = generateSalt();
-        this.passwordHash = hashPassword(newPassword, salt);
-    }
-
-    /**
-     * gets the kyber public key
-     * @return
-     */
-    public byte[] getKyberPublicKey() {
-        return this.kyberPublicKey;
-    }
-
-    /**
-     * sets the kyber public key
-     * @param kyberPublicKey
-     */
-    public void setKyberPublicKey(byte[] kyberPublicKey) {
+    public void setKyberPublicKey(String kyberPublicKey) {
         this.kyberPublicKey = kyberPublicKey;
     }
-
+    
     /**
-     * get the dilithium public ket
-     * @return
+     * Get the Dilithium public key
+     * 
+     * @return Base64 encoded Dilithium public key
      */
-    public byte[] getDilithiumPublicKey() {
-        return this.dilithiumPublicKey;
+    public String getDilithiumPublicKey() {
+        return dilithiumPublicKey;
     }
-
+    
     /**
-     * sets the dilithium public key
-     * @param dilithiumPublicKey
+     * Set the Dilithium public key
+     * 
+     * @param dilithiumPublicKey Base64 encoded Dilithium public key
      */
-    public void setDilithiumPublicKey(byte[] dilithiumPublicKey) {
+    public void setDilithiumPublicKey(String dilithiumPublicKey) {
         this.dilithiumPublicKey = dilithiumPublicKey;
     }
-
+    
     /**
-     * checks if the user account is active
-     * @return
+     * Verify a password against the stored hash
+     * 
+     * @param password The password to verify
+     * @return True if password matches
+     * @throws NoSuchAlgorithmException If SHA-512 is not available
      */
-    public boolean isActive() {
-        return this.isActive;
+    public boolean verifyPassword(String password) throws NoSuchAlgorithmException {
+        String hash = hashPassword(password, this.passwordSalt);
+        return hash.equals(this.passwordHash);
     }
-
+    
     /**
-     * gets the users role
-     * @return
+     * Generate a random salt for password hashing
+     * 
+     * @return Base64 encoded salt
      */
-    public String getRole() {
-        return this.role;
+    private String generateSalt() {
+        byte[] salt = new byte[16];
+        new SecureRandom().nextBytes(salt);
+        return Base64.getEncoder().encodeToString(salt);
     }
-
+    
     /**
-     * sets the users role
-     * @param role
-     */
-    public void setRole(String role) {
-        this.role = role; 
-    }
-
-    /**
-     * hashes the password with the provided salt using SHA3-512
-     * @param password
-     * @param salt
-     * @return the hashed password as a b64 encoded string
-     * @throws NoSuchAlgorithmException
+     * Hash a password with the given salt using SHA-512
+     * 
+     * @param password The password to hash
+     * @param salt The salt to use
+     * @return Base64 encoded hash
+     * @throws NoSuchAlgorithmException If SHA-512 is not available
      */
     private String hashPassword(String password, String salt) throws NoSuchAlgorithmException {
-        MessageDigest md = MessageDigest.getInstance("SHA3-512");
-        md.update(salt.getBytes());
+        MessageDigest md = MessageDigest.getInstance("SHA-512");
+        md.update(Base64.getDecoder().decode(salt));
         byte[] hash = md.digest(password.getBytes());
         return Base64.getEncoder().encodeToString(hash);
     }
-
+    
     /**
-     * generates a random salt for password hashing
-     * @return
-     */
-    private String generateSalt() {
-        SecureRandom random = new SecureRandom();
-        byte[] salt = new byte[16];
-        random.nextBytes(salt);
-        return Base64.getEncoder().encodeToString(salt);
-    }
-
-    /**
-     * generates a random TOTP secret 
-     * @return
+     * Generate a random TOTP secret
+     * 
+     * @return Base32 encoded TOTP secret
      */
     private String generateTotpSecret() {
-        SecureRandom random = new SecureRandom();
-        byte[] secret = new byte[20]; 
-        random.nextBytes(secret);
-
-        return merrimackutil.codec.Base32.encodeToString(secret, true); // true to ignore padding
+        byte[] secret = new byte[20];
+        new SecureRandom().nextBytes(secret);
+        return merrimackutil.codec.Base32.encodeToString(secret, false);
+    }
+    
+    @Override
+    public void deserialize(JSONType obj) throws InvalidObjectException {
+        if (!(obj instanceof JSONObject)) {
+            throw new InvalidObjectException("Expected JSONObject for User");
+        }
+        
+        JSONObject user = (JSONObject) obj;
+        
+        // Validate required fields
+        String[] requiredFields = {"username", "passwordHash", "passwordSalt", "totpSecret"};
+        for (String field : requiredFields) {
+            if (!user.containsKey(field) || user.getString(field) == null) {
+                throw new InvalidObjectException("Missing required field: " + field);
+            }
+        }
+        
+        this.username = user.getString("username");
+        this.passwordHash = user.getString("passwordHash");
+        this.passwordSalt = user.getString("passwordSalt");
+        this.totpSecret = user.getString("totpSecret");
+        
+        // Optional fields
+        this.kyberPublicKey = user.getString("kyberPublicKey");
+        this.dilithiumPublicKey = user.getString("dilithiumPublicKey");
     }
 
-    /**
-     * converts the user object to a JSON type for serialization
-     */
     @Override
     public JSONType toJSONType() {
         JSONObject obj = new JSONObject();
-
-        obj.put("username", this.username);
-        obj.put("password-hash", this.passwordHash);
-        obj.put("salt", this.salt);
-        obj.put("totp0secret", this.totpSecret);
-        obj.put("active", this.isActive);
-        obj.put("role", this.role);
-
-        // only include keys if theu exist
-        if (this.kyberPublicKey != null) {
-            obj.put("kyber-public-key", Base64.getEncoder().encodeToString(this.kyberPublicKey));
+        obj.put("username", username);
+        obj.put("passwordHash", passwordHash);
+        obj.put("passwordSalt", passwordSalt);
+        obj.put("totpSecret", totpSecret);
+        
+        if (kyberPublicKey != null) {
+            obj.put("kyberPublicKey", kyberPublicKey);
         }
-        if (this.dilithiumPublicKey != null) {
-            obj.put("dilithium-public-key", Base64.getEncoder().encodeToString(this.dilithiumPublicKey));
+        
+        if (dilithiumPublicKey != null) {
+            obj.put("dilithiumPublicKey", dilithiumPublicKey);
         }
+        
         return obj;
     }
-
-    /**
-     * serializes this user object to a JSON string
-     */
+    
     @Override
     public String serialize() {
         return toJSONType().toJSON();
     }
 
-    /**
-     * deserializes a JSONObject into this user object
-     */
-    @Override
-    public void deserialize(JSONType obj) throws InvalidObjectException {
-        if (obj instanceof Object) {
-            JSONObject userObj = (JSONObject) obj;
-
-            // required fields
-            this.username = userObj.getString("username");
-            this.passwordHash = userObj.getString("password-hash");
-            this.salt = userObj.getString("salt");
-            this.totpSecret = userObj.getString("totp-secret");
-
-            // optional fields with defaults
-            this.isActive = userObj.getBoolean("active") != null ? userObj.getBoolean("active") : true;
-            this.role = userObj.getString("role") != null ? userObj.getString("role") : "user";
-
-            // public keys 
-            String kyberKey = userObj.getString("kyber-public-key");
-            if (kyberKey != null) {
-                this.kyberPublicKey = Base64.getDecoder().decode(kyberKey);
-            }
-
-            String dilithiumKey = userObj.getString("dilithium-public-key");
-            if (dilithiumKey != null) {
-                this.dilithiumPublicKey = Base64.getDecoder().decode(dilithiumKey);
-            }
-        } else {
-            throw new InvalidObjectException("User: ERROR: Expected JSON Object for User deserialiation");
-        }
-    }
 }

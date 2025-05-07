@@ -1,249 +1,208 @@
 package common;
 
-import merrimackutil.json.JsonIO;
-import merrimackutil.json.types.JSONObject;
-
 import java.io.File;
-import java.io.FileNotFoundException; 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.naming.ConfigurationException;
+import merrimackutil.json.JsonIO;
+import merrimackutil.json.types.JSONObject;
 
 /**
- * centralized access to config parameters from the json files
- * supports nested properties using dot notation
+ * Handles loading and accessing configuration from JSON files.
  */
 public class Config {
-    private JSONObject systemConfig;
-    private JSONObject specifiedConfig;
-
-    private final Map<String, Object> valueCache = new HashMap<>();
-
+    private JSONObject configData;
+    private static Map<String, Config> instances = new HashMap<>();
+    
     /**
+     * Loads configuration from the specified file path
      * 
-     * @param systemConfigPath
-     * @param specifiConfigPath
-     * @throws ConfigurationException
+     * @param configPath Path to the configuration file
+     * @throws IOException If file cannot be read
      */
-    public Config(String systemConfigPath, String specifiConfigPath) throws ConfigException {
-
+    private Config(String configPath) throws IOException {
+        this.configData = JsonIO.readObject(new File(configPath));
+    }
+    
+    /**
+     * Get a shared instance of Config for the specified file
+     * 
+     * @param configPath Path to the configuration file
+     * @return Config instance
+     * @throws IOException If file cannot be read
+     */
+    public static Config getInstance(String configPath) throws IOException {
+        if (!instances.containsKey(configPath)) {
+            instances.put(configPath, new Config(configPath));
+        }
+        return instances.get(configPath);
+    }
+    
+    /**
+     * Get a shared instance with a default configuration path
+     * 
+     * @param isServer Whether this is the server config
+     * @return Config instance
+     * @throws IOException If file cannot be read
+     */
+    public static Config getInstance(boolean isServer) throws IOException {
+        String configPath = isServer ? "config/server-config.json" : "config/client-config.json";
+        return getInstance(configPath);
+    }
+    
+    /**
+     * Get shared system config instance
+     * 
+     * @return Config instance
+     * @throws IOException If file cannot be read
+     */
+    public static Config getSystemConfig() throws IOException {
+        return getInstance("config/system-config.json");
+    }
+    
+    /**
+     * Get a string value from configuration
+     * 
+     * @param key The configuration key (dot notation for nested properties)
+     * @param defaultValue Default value if key not found
+     * @return String value from config
+     */
+    public String getString(String key, String defaultValue) {
+        Object value = getValue(key);
+        return value != null ? value.toString() : defaultValue;
+    }
+    
+    /**
+     * Get an integer value from configuration
+     * 
+     * @param key The configuration key (dot notation for nested properties)
+     * @param defaultValue Default value if key not found
+     * @return Integer value from config
+     */
+    public int getInt(String key, int defaultValue) {
+        Object value = getValue(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        
         try {
-            // load system wide configuration 
-            this.systemConfig = JsonIO.readObject(new File(specifiConfigPath));
-            System.out.println("Config: loaded system config file from: " + systemConfigPath);
-
-            // load specific config (client or server)
-            this.specifiedConfig = JsonIO.readObject(new File(specifiConfigPath));
-            System.out.println("Config: loaded specific config file from: " + specifiConfigPath);
-        } catch (FileNotFoundException e) {
-            throw new ConfigException("Config: ERROR Failed to load configuration: " + e.getMessage(), e);
-        }   
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
-
+    
     /**
+     * Get a long value from configuration
      * 
-     * @param path
-     * @param defaultValue
-     * @return
+     * @param key The configuration key (dot notation for nested properties)
+     * @param defaultValue Default value if key not found
+     * @return Long value from config
      */
-    public String getString(String path, String defaultValue) {
-        // check cache first 
-        System.out.println("Checking the cache...");
-        if (valueCache.containsKey(path)) {
-            System.out.println("Config: value found in the cache");
-            Object value = valueCache.get(path);
-            System.out.println("Config: value extracted, returning");
-            return (value instanceof String) ? (String)value : defaultValue;
-        }
-        System.out.println("Config: value not found in cache");
-
-        // split the path into parts
-        String[] parts = path.split("\\.");
-
-        // try specific confic first, then fall back to system
-        System.out.println("Config: trying specific config");
-        String value = getNestedString(specifiedConfig, parts);
+    public long getLong(String key, long defaultValue) {
+        Object value = getValue(key);
         if (value == null) {
-            System.out.println("Config: couldnt get specific, trying system");
-            value = getNestedString(systemConfig, parts);
+            return defaultValue;
         }
-
-        // cache the result
-        if (value != null) {
-            valueCache.put(path, value);
-            System.out.println("Config: possible success");
-            return value;
+        
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
         }
-
-        System.out.println("Config: returning default value");
-        return defaultValue;
+        
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
-
+    
     /**
-     * gets an integer value from the configuration
-     * @param path
-     * @param defaultValue
-     * @return
+     * Get a boolean value from configuration
+     * 
+     * @param key The configuration key (dot notation for nested properties)
+     * @param defaultValue Default value if key not found
+     * @return Boolean value from config
      */
-    public int getInt(String path, int defaultValue) {
-
-        System.out.println("Config: checking cache for value");
-        // check the cache first 
-        if (valueCache.containsKey(path)) {
-            System.out.println("Config: value found in cache");
-            Object value = valueCache.get(path);
-            System.out.println("Config: value extracted");
-            return (value instanceof Integer) ? (Integer)value : defaultValue;
-        }
-        System.out.println("Config: value not found in cache");
-
-        // split path into parts
-        String[] parts = path.split("\\.");
-
-        // try specific, fallback to system
-        System.out.println("Config: trying specific");
-        Integer value = getNestedInt(specifiedConfig, parts);
+    public boolean getBoolean(String key, boolean defaultValue) {
+        Object value = getValue(key);
         if (value == null) {
-            System.out.println("Config: specific failed, defaulting to system");
-            value = getNestedInt(systemConfig, parts);
+            return defaultValue;
         }
-
-        // cache the result
-        if (value != null) {
-            System.out.println("value holds substance");
-            valueCache.put(path, value);
-            System.out.println("Config: value cached, returning");
-            return value;
+        
+        if (value instanceof Boolean) {
+            return (Boolean) value;
         }
-
-        System.out.println("Config: value held no substance, defaulting and returning");
-
-        return defaultValue;
-
+        
+        return Boolean.parseBoolean(value.toString());
     }
-
+    
     /**
-     * gets an boolean value from the configuration
-     * @param path
-     * @param defaultValue
-     * @return
+     * Get a nested JSONObject from configuration
+     * 
+     * @param key The configuration key (dot notation for nested properties)
+     * @return JSONObject from config or null if not found
      */
-    public boolean getBoolean(String path, boolean defaultValue) {
-
-        System.out.println("Config: checking cache for value");
-        // check the cache first 
-        if (valueCache.containsKey(path)) {
-            System.out.println("Config: value found in cache");
-            Object value = valueCache.get(path);
-            System.out.println("Config: value extracted");
-            return (value instanceof Boolean) ? (Boolean)value : defaultValue;
-        }
-        System.out.println("Config: value not found in cache");
-
-        // split path into parts
-        String[] parts = path.split("\\.");
-
-        // try specific, fallback to system
-        System.out.println("Config: trying specific");
-        Boolean value = getNestedBoolean(specifiedConfig, parts);
-        if (value == null) {
-            System.out.println("Config: specific failed, defaulting to system");
-            value = getNestedBoolean(systemConfig, parts);
-        }
-
-        // cache the result
-        if (value != null) {
-            System.out.println("value holds substance");
-            valueCache.put(path, value);
-            System.out.println("Config: value cached, returning");
-            return value;
-        }
-
-        System.out.println("Config: value held no substance, defaulting and returning");
-
-        return defaultValue;
+    public JSONObject getObject(String key) {
+        Object value = getValue(key);
+        return value instanceof JSONObject ? (JSONObject) value : null;
     }
-
+    
     /**
-     * gets nested string value from a JSON object
-     * @param jsonObj
-     * @param parts
-     * @return
+     * Get a value from configuration using dot notation
+     * 
+     * @param key The configuration key (dot notation for nested properties)
+     * @return Object from config or null if not found
      */
-    private String getNestedString(JSONObject jsonObj, String[] parts) {
-        JSONObject current = jsonObj;
-
-        // navigate to the nested object
-        System.out.println("Config: Searching...");
-        for (int i = 0; i < parts.length - 1; i++) {
-            current = current.getObject(parts[i]);
-            if (current == null) {
-                System.out.println("Config: null found");
+    private Object getValue(String key) {
+        if (configData == null || key == null || key.isEmpty()) {
+            return null;
+        }
+        
+        String[] parts = key.split("\\.");
+        Object current = configData;
+        
+        for (String part : parts) {
+            if (current instanceof JSONObject) {
+                current = ((JSONObject) current).get(part);
+                if (current == null) {
+                    return null;
+                }
+            } else {
                 return null;
             }
         }
-
-        // get final value
-        System.out.println("Config: a value was found, returning");
-        return current.getString(parts[parts.length - 1]);
+        
+        return current;
     }
-
+    
     /**
-     * gets nested integer value from a JSON object
-     * @param jsonObj
-     * @param parts
-     * @return
+     * Validate that the configuration contains required keys
+     * 
+     * @param requiredKeys Array of required configuration keys
+     * @throws IllegalArgumentException If any required key is missing
      */
-    private Integer getNestedInt(JSONObject jsonObj, String[] parts) {
-        JSONObject current = jsonObj;
-
-        // navigate to the nested object
-        System.out.println("Config: Searching...");
-        for (int i = 0; i < parts.length - 1; i++) {
-            current = current.getObject(parts[i]);
-            if (current == null) {
-                System.out.println("Config: null found");
-                return null;
+    public void validate(String[] requiredKeys) throws IllegalArgumentException {
+        for (String key : requiredKeys) {
+            if (getValue(key) == null) {
+                throw new IllegalArgumentException("Missing required configuration key: " + key);
             }
         }
-
-        // get final value
-        System.out.println("Config: a value was found, returning");
-        return current.getInt(parts[parts.length - 1]);
     }
-
+    
     /**
-     * gets nested string value from a JSON object
-     * @param jsonObj
-     * @param parts
-     * @return
+     * Check if a configuration file exists
+     * 
+     * @param configPath Path to check
+     * @return True if file exists
      */
-    private Boolean getNestedBoolean(JSONObject jsonObj, String[] parts) {
-        JSONObject current = jsonObj;
-
-        // navigate to the nested object
-        System.out.println("Config: Searching...");
-        for (int i = 0; i < parts.length - 1; i++) {
-            current = current.getObject(parts[i]);
-            if (current == null) {
-                System.out.println("Config: null found");
-                return null;
-            }
-        }
-
-        System.out.println("Config: a value was found, returning");
-        // get final value
-        return current.getBoolean(parts[parts.length - 1]);
+    public static boolean exists(String configPath) {
+        return Files.exists(Paths.get(configPath));
     }
-
-    /**
-     * gets the raw JSONObject for more complex operations
-     * @param isSystemConfig
-     * @return systemConfig if boolean is true (we're dealing with a system config), specifiedConfig otherwise (dealing with a specific config)
-     */
-    public JSONObject getRawConfig(boolean isSystemConfig) {
-        return isSystemConfig ? systemConfig : specifiedConfig;
-    }
-
 }

@@ -1,171 +1,182 @@
 package blockchain;
 
-import merrimackutil.json.types.JSONArray;
-import merrimackutil.json.types.JSONObject;
+import java.io.InvalidObjectException;
 
-import java.util.ArrayList;
-import java.util.List;
+import merrimackutil.json.JSONSerializable;
+import merrimackutil.json.types.JSONObject;
+import merrimackutil.json.types.JSONType;
 
 /**
- * Stores metadata about files in the blockchain
+ * Represents metadata for a file stored in the blockchain.
  */
-public class FileMetadata {
+public class FileMetadata implements JSONSerializable {
     private String fileName;
-    private String fileHash;
     private long fileSize;
-    private String storageFileName;
-    private String encryptedKey;
-    private String owner;
-    private long timeStamp;
-    private List<String> allowedUsers;
-
+    private String fileHash;
+    private String encryptedSymmetricKey;
+    private String iv;
+    
     /**
-     * Constructor for file metadata
-     * @param fileName Original file name
-     * @param fileHash Hash of the file
-     * @param fileSize Size of the file in bytes
-     * @param storageFileName Name of file in storage
-     * @param encryptedKey Encrypted symmetric key
-     * @param owner Owner of the file
-     * @param timeStamp Upload timestamp
+     * Creates a new file metadata instance
+     * 
+     * @param fileName The name of the file
+     * @param fileSize The size of the file in bytes
+     * @param fileHash SHA3-512 hash of the file content
+     * @param encryptedSymmetricKey Base64-encoded encrypted AES key
+     * @param iv Base64-encoded initialization vector for AES-GCM
      */
-    public FileMetadata(String fileName, String fileHash, long fileSize, String storageFileName, 
-                        String encryptedKey, String owner, long timeStamp) {
+    public FileMetadata(String fileName, long fileSize, String fileHash, 
+                        String encryptedSymmetricKey, String iv) {
         this.fileName = fileName;
-        this.fileHash = fileHash;
         this.fileSize = fileSize;
-        this.storageFileName = storageFileName;
-        this.encryptedKey = encryptedKey;
-        this.owner = owner;
-        this.timeStamp = timeStamp;
-        this.allowedUsers = new ArrayList<>();
-        this.allowedUsers.add(owner); // Owner always has access
+        this.fileHash = fileHash;
+        this.encryptedSymmetricKey = encryptedSymmetricKey;
+        this.iv = iv;
     }
-
+    
     /**
-     * Private constructor for deserialization
+     * Creates file metadata from a JSON object
+     * 
+     * @param json JSONObject containing file metadata
+     * @throws InvalidObjectException If JSON is invalid
      */
-    private FileMetadata() {
-        this.allowedUsers = new ArrayList<>();
+    public FileMetadata(JSONObject json) throws InvalidObjectException {
+        deserialize(json);
     }
-
+    
     /**
-     * Convert to JSONObject
-     * @return JSON representation
+     * Get the file name
+     * 
+     * @return The file name
      */
-    public JSONObject toJSONObject() {
-        JSONObject obj = new JSONObject();
-        obj.put("fileName", fileName);
-        obj.put("fileHash", fileHash);
-        obj.put("fileSize", fileSize);
-        obj.put("storageFileName", storageFileName);
-        obj.put("encryptedKey", encryptedKey);
-        obj.put("owner", owner);
-        obj.put("timeStamp", timeStamp);
-
-        JSONArray allowedArray = new JSONArray();
-        for (String user : allowedUsers) {
-            allowedArray.add(user);
-        }
-        obj.put("allowedUsers", allowedArray);
-
-        return obj;
-    }
-
-    /**
-     * Deserialize from JSON
-     * @param jsonObj JSON object to deserialize
-     * @return FileMetadata object
-     */
-    public static FileMetadata fromJSON(JSONObject jsonObj) {
-        FileMetadata metadata = new FileMetadata();
-        
-        metadata.fileName = jsonObj.getString("fileName");
-        metadata.fileHash = jsonObj.getString("fileHash");
-        
-        Number fileSize = (Number) jsonObj.get("fileSize");
-        metadata.fileSize = fileSize.longValue();
-        
-        metadata.storageFileName = jsonObj.getString("storageFileName");
-        metadata.encryptedKey = jsonObj.getString("encryptedKey");
-        metadata.owner = jsonObj.getString("owner");
-        
-        Number timestamp = (Number) jsonObj.get("timeStamp");
-        metadata.timeStamp = timestamp.longValue();
-
-        JSONArray allowedArray = jsonObj.getArray("allowedUsers");
-        if (allowedArray != null) {
-            for (int i = 0; i < allowedArray.size(); i++) {
-                String user = allowedArray.getString(i);
-                if (user != null) {
-                    metadata.allowedUsers.add(user);
-                }
-            }
-        }
-
-        return metadata;
-    }
-
-    /**
-     * Add a user to the allowed list
-     * @param username User to add
-     */
-    public void addAllowedUser(String username) {
-        if (!allowedUsers.contains(username)) {
-            allowedUsers.add(username);
-        }
-    }
-
-    /**
-     * Remove a user from the allowed list
-     * @param username User to remove
-     */
-    public void removeAllowedUser(String username) {
-        // Owner always has access
-        if (!username.equals(owner)) {
-            allowedUsers.remove(username);
-        }
-    }
-
-    /**
-     * Check if a user has access
-     * @param username User to check
-     * @return true if allowed
-     */
-    public boolean hasAccess(String username) {
-        return allowedUsers.contains(username);
-    }
-
-    // Getters
     public String getFileName() {
         return fileName;
     }
-
-    public String getFileHash() {
-        return fileHash;
-    }
-
+    
+    /**
+     * Get the file size in bytes
+     * 
+     * @return The file size
+     */
     public long getFileSize() {
         return fileSize;
     }
-
-    public String getStorageFileName() {
-        return storageFileName;
+    
+    /**
+     * Get the file hash
+     * 
+     * @return Base64-encoded SHA3-512 hash
+     */
+    public String getFileHash() {
+        return fileHash;
+    }
+    
+    /**
+     * Get the encrypted symmetric key
+     * 
+     * @return Base64-encoded encrypted AES key
+     */
+    public String getEncryptedSymmetricKey() {
+        return encryptedSymmetricKey;
+    }
+    
+    /**
+     * Get the initialization vector
+     * 
+     * @return Base64-encoded IV for AES-GCM
+     */
+    public String getIv() {
+        return iv;
     }
 
-    public String getEncryptedKey() {
-        return encryptedKey;
+    @Override
+    public JSONType toJSONType() {
+        try {
+            JSONObject json = new JSONObject();
+            
+            if (fileName == null) {
+                System.err.println("Error: FileMetadata has null fileName");
+                fileName = "unknown_file";  // Use a placeholder
+            }
+            json.put("fileName", fileName);
+            
+            json.put("fileSize", fileSize);
+            
+            if (fileHash == null) {
+                System.err.println("Error: FileMetadata has null fileHash");
+                fileHash = "unknown_hash";  // Use a placeholder
+            }
+            json.put("fileHash", fileHash);
+            
+            if (encryptedSymmetricKey == null) {
+                System.err.println("Error: FileMetadata has null encryptedSymmetricKey");
+                encryptedSymmetricKey = "unknown_key";  // Use a placeholder
+            }
+            json.put("encryptedSymmetricKey", encryptedSymmetricKey);
+            
+            if (iv == null) {
+                System.err.println("Error: FileMetadata has null iv");
+                iv = "unknown_iv";  // Use a placeholder
+            }
+            json.put("iv", iv);
+            
+            return json;
+        } catch (Exception e) {
+            System.err.println("Error in FileMetadata.toJSONType: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Return a minimal valid JSON as fallback
+            JSONObject fallback = new JSONObject();
+            fallback.put("fileName", fileName != null ? fileName : "unknown_file");
+            fallback.put("fileSize", fileSize);
+            fallback.put("fileHash", fileHash != null ? fileHash : "unknown_hash");
+            fallback.put("encryptedSymmetricKey", "unknown_key");
+            fallback.put("iv", "unknown_iv");
+            return fallback;
+        }
     }
 
-    public String getOwner() {
-        return owner;
+    @Override
+    public void deserialize(JSONType obj) throws InvalidObjectException {
+        if (!(obj instanceof JSONObject)) {
+            throw new InvalidObjectException("Expected JSONObject for FileMetadata");
+        }
+        
+        JSONObject json = (JSONObject) obj;
+        
+        // Validate required fields
+        String[] requiredFields = {"fileName", "fileSize", "fileHash", "encryptedSymmetricKey", "iv"};
+        for (String field : requiredFields) {
+            if (!json.containsKey(field)) {
+                throw new InvalidObjectException("Missing required field: " + field);
+            }
+        }
+        
+        this.fileName = json.getString("fileName");
+        
+        // Handle fileSize more robustly
+        Object fileSizeObj = json.get("fileSize");
+        if (fileSizeObj == null) {
+            throw new InvalidObjectException("fileSize is null");
+        }
+        
+        if (fileSizeObj instanceof Number) {
+            this.fileSize = ((Number) fileSizeObj).longValue();
+        } else {
+            try {
+                this.fileSize = Long.parseLong(fileSizeObj.toString());
+            } catch (NumberFormatException e) {
+                throw new InvalidObjectException("Invalid fileSize format: " + fileSizeObj);
+            }
+        }
+        
+        this.fileHash = json.getString("fileHash");
+        this.encryptedSymmetricKey = json.getString("encryptedSymmetricKey");
+        this.iv = json.getString("iv");
     }
-
-    public long getTimeStamp() {
-        return timeStamp;
-    }
-
-    public List<String> getAllowedUsers() {
-        return new ArrayList<>(allowedUsers);
+    
+    @Override
+    public String serialize() {
+        return toJSONType().toJSON();
     }
 }

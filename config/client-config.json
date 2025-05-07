@@ -1,0 +1,20 @@
+{
+    "client_id": "client_${user.name}",
+    "server": {
+      "host": "127.0.0.1",
+      "port": 5100,
+      "timeout_ms": 30000
+    },
+    "storage": {
+      "download_directory": "./downloads",
+      "upload_buffer_size": 1024000
+    },
+    "crypto": {
+      "totp_window_seconds": 30,
+      "nonce_cache_size": 1000
+    },
+    "ui": {
+      "show_progress": true,
+      "default_command": "help"
+    }
+  }

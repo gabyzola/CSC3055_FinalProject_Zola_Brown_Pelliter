@@ -1,227 +1,185 @@
 package pqcrypto;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.security.GeneralSecurityException;
 
-import common.Config;
-import common.ConfigException;
-import common.Constants;
 import blockchain.BlockchainManager;
+import common.Config;
+import common.Constants;
 
 /**
- * main server application for the system
- * initializzes all components, listens for connections, and manages server lifecycle
+ * Main server application for the PQ Blockchain File Sharing system.
  */
 public class FileServer {
+    private int port;
+    private int maxConnections;
+    private int threadPoolSize;
+    private boolean running = false;
     
-    private final Config config;
-    private final CryptoManager cryptoManager;
-    private final AuthManager authManager;
-    private final FileManager fileManager;
-    private final BlockchainManager blockchainManager;
-
     private ServerSocket serverSocket;
     private ExecutorService threadPool;
-    private boolean running;
-
-    private final int port;
-    private final int maxConnections;
-    private final String bindAddress;
-
-    private ScheduledExecutorService maintenanceScheduler;
-    private final int maintenanceIntervalMinutes;
-
+    
+    private CryptoManager cryptoManager;
+    private AuthManager authManager;
+    private FileManager fileManager;
+    private BlockchainManager blockchainManager;
+    
     /**
-     * main method, starts the file server
-     * @param args
+     * Create a new FileServer
+     * 
+     * @param configPath Path to configuration file (optional)
+     * @throws Exception If initialization fails
      */
-    public static void main(String[] args) {
-
-        System.out.println("FileServer: Starting PQ Blockchain File Server...");
-
-        String configPath = "config/server_config.json";
-        if (args.length > 0) {
-            configPath = args[0];
+    public FileServer(String configPath) throws Exception {
+        // Load configuration
+        Config config;
+        if (configPath != null && new File(configPath).exists()) {
+            config = Config.getInstance(configPath);
+        } else {
+            config = Config.getInstance(true); // Default server config
         }
-
-        try {
-            // initialize with config 
-            FileServer server = new FileServer(configPath);
-
-            // set up shutdown hook for graceful termination
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("FileServer: Shutdown signal received, stopping server...");
-                server.stop();
-            }));
-        } catch (ConfigException e) {
-            System.err.println("FileServer: Configuration error: " + e.getMessage());
-            System.exit(1);
-        } catch (Exception e) {
-            System.err.println("File Server: Server initialization error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
-    }
-
-    /**
-     * constructs a new file server with the specified config file 
-     * @param configPath
-     * @throws ConfigException
-     * @throws IOException
-     * @throws GeneralSecurityException
-     */
-    public FileServer(String configPath) throws ConfigException, IOException, GeneralSecurityException {
-
-        // load config
-        System.out.println("FileServer: loading config from: " + configPath);
-        this.config = new Config("config.system_config.json", configPath);
-
-        // extract server config 
-        this.port = config.getInt("server.port", 5001);
+        
+        // Load system configuration
+        Config systemConfig = Config.getSystemConfig();
+        
+        // Initialize server parameters
+        this.port = config.getInt("server.port", Constants.DEFAULT_SERVER_PORT);
         this.maxConnections = config.getInt("server.max_connections", 100);
-        this.bindAddress = config.getString("server.bind_address", "0.0.0.0");
-        int threadPoolSize = config.getInt("server.thread_pool_size", 10);
-
-        System.out.println("FileServer: Initializing server on " + bindAddress + ":" + port);
-        System.out.println("FileServer: Thread pool size: " + threadPoolSize);
-        System.out.println("FileServer: Max connections: " + maxConnections);
-
-        // initialize thread pool
-        this.threadPool = Executors.newFixedThreadPool(threadPoolSize);
-
-        // initialize components
-        System.out.println("FileServer: Initializing crypto components...");
+        this.threadPoolSize = config.getInt("server.thread_pool_size", 10);
+        
+        // Initialize components
         this.cryptoManager = new CryptoManager(config);
-
-        System.out.println("FileServer: Initializing blockchain...");
         this.blockchainManager = new BlockchainManager(config);
-
-        System.out.println("FileServer: Initializing authentication manager...");
-        this.authManager = new AuthManager(config, cryptoManager);
-
-        System.out.println("FileServer: Initializing file manager...");
-        this.fileManager = new FileManager(config, cryptoManager, blockchainManager, authManager);
-
-        this.running = false;
-
-        this.maintenanceIntervalMinutes = config.getInt("server.maintenance_interval_mins", 30);
-        this.maintenanceScheduler = Executors.newScheduledThreadPool(1);
-    } 
-
+        this.authManager = new AuthManager(cryptoManager, config);
+        this.fileManager = new FileManager(config, cryptoManager, blockchainManager);
+        
+        // Create thread pool
+        this.threadPool = Executors.newFixedThreadPool(threadPoolSize);
+    }
+    
     /**
-     * starts the server
-     * @throws IOException
+     * Start the server
+     * 
+     * @throws IOException If server socket binding fails
      */
     public void start() throws IOException {
         if (running) {
-            System.out.println("FileServer: Server already runnning");
-            return; 
+            return;
         }
-
-        // create server socket
+        
+        // Create server socket
         serverSocket = new ServerSocket(port, maxConnections);
         running = true;
-
-        System.out.println("FileServer: Server started and lisening on port " + port);
-
-        maintenanceScheduler.scheduleAtFixedRate(this::performMaintenance, maintenanceIntervalMinutes, maintenanceIntervalMinutes, TimeUnit.MINUTES);
-        System.out.println("FileServer: Maintenance tasks schedules every " + maintenanceIntervalMinutes + " minutes");
-
-        // main accept loop
+        
+        System.out.println("Server started on port " + port);
+        
+        // Accept connections
+        new Thread(() -> acceptConnections()).start();
+    }
+    
+    /**
+     * Accept client connections
+     */
+    private void acceptConnections() {
         while (running) {
             try {
-
-                // accept new connection
+                // Accept connection
                 Socket clientSocket = serverSocket.accept();
-
-                // create client handler and submit to thread pool
-                ClientHandler handler = new ClientHandler(clientSocket, config, cryptoManager, authManager, fileManager, blockchainManager);
+                System.out.println("Client connected: " + clientSocket.getInetAddress());
+                
+                // Create client handler
+                ClientHandler handler = new ClientHandler(
+                    clientSocket,
+                    cryptoManager,
+                    authManager,
+                    fileManager,
+                    blockchainManager
+                );
+                
+                // Submit to thread pool
                 threadPool.submit(handler);
-                System.out.println("FileServer: New coonnection accepted from: " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort());
-
             } catch (IOException e) {
                 if (running) {
-                    // only log errors if we're supposed to be running 
-                    System.err.println("FileServer: Error accepting connections: "+ e.getMessage());
+                    System.err.println("Error accepting connection: " + e.getMessage());
                 }
             }
         }
     }
-
+    
     /**
-     * stops server ✨gracefully✨
+     * Stop the server
      */
     public void stop() {
         if (!running) {
-            System.out.println("FileServer: server already stopped");
             return;
         }
-
-        running = false; 
-        System.out.println("FileServer: Stopping the server...");
-
-        // stop the maintenance scheduler
-        maintenanceScheduler.shutdown();
+        
+        running = false;
+        
         try {
-            if (!maintenanceScheduler.awaitTermination(10, TimeUnit.SECONDS)) {
-                maintenanceScheduler.shutdownNow();
-            } 
-        } catch (InterruptedException e) {
-            System.out.println("FileServer: interruped exception");
-            maintenanceScheduler.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-
-        // close server socket
-        try {
+            // Close server socket
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
-            } 
-        } catch (IOException e) {
-            System.err.println("FileServer: Error closing server sockete: " + e.getMessage());
-        }
-
-        // shutdown thread pool
-        threadPool.shutdown();
-        try {
-            //wait for active tasks to terminate
-            if (!threadPool.awaitTermination(Constants.THREAD_POOL_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS)) {
-                // force shutdown
+            }
+            
+            // Shutdown thread pool
+            if (threadPool != null && !threadPool.isShutdown()) {
                 threadPool.shutdown();
             }
-        } catch (InterruptedException e) {
-            threadPool.shutdown();
-            Thread.currentThread().interrupt();
+            
+            System.out.println("Server stopped");
+        } catch (IOException e) {
+            System.err.println("Error stopping server: " + e.getMessage());
         }
-
-        // clean up sessions 
-        System.out.println("FileServer: cleaning up zctive sessions...");
-        // authManager handles this, don't need to call anything
-
-        // final shutdown msg
-        System.out.println("FileServer: Server stopped successfully");
     }
-
+    
     /**
-     * performs periodic maintenance tasks
+     * Main method
+     * 
+     * @param args Command line arguments
      */
-    private void performMaintenance() {
+    public static void main(String[] args) {
         try {
-            // clean up expired sessions
-            authManager.cleanupExpiredSessions();
-            // clean up orphaned files
-            int filesRemoved = fileManager.cleanupOrphanedFiles();
-
-            System.out.println("FileServer: Maintenance complete: removed " + filesRemoved + " orphaned files");
+            // Parse arguments
+            String configPath = null;
+            
+            for (int i = 0; i < args.length; i++) {
+                if (("-c".equals(args[i]) || "--config".equals(args[i])) && i + 1 < args.length) {
+                    configPath = args[i + 1];
+                    i++;
+                } else if ("-h".equals(args[i]) || "--help".equals(args[i])) {
+                    printHelp();
+                    return;
+                }
+            }
+            
+            // Create and start server
+            FileServer server = new FileServer(configPath);
+            server.start();
+            
+            // Add shutdown hook
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop()));
         } catch (Exception e) {
-            System.err.println("FileServer: Error during maintenance: " + e.getMessage());
+            System.err.println("Error starting server: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
         }
     }
-
+    
+    /**
+     * Print help message
+     */
+    private static void printHelp() {
+        System.out.println("usage:");
+        System.out.println("server");
+        System.out.println("server --config <configfile>");
+        System.out.println("server --help");
+        System.out.println("options:");
+        System.out.println("-c, --config Set the config file");
+        System.out.println("-h, --help Display the help");
+    }
 }

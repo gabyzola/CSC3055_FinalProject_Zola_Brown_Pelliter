@@ -1,176 +1,187 @@
 package blockchain;
 
-import merrimackutil.json.types.JSONObject;
+import java.io.InvalidObjectException;
+import java.time.Instant;
+import java.util.UUID;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
+import merrimackutil.json.JSONSerializable;
+import merrimackutil.json.types.JSONObject;
+import merrimackutil.json.types.JSONType;
 
 /**
- * Represents a transaction in the blockchain
+ * Represents a transaction in the blockchain for file operations.
  */
-public class Transaction {
-    private String transactionId;
-    private String uploaderId;
-    private String type;
+public class Transaction implements JSONSerializable {
+    private String id;
+    private String timestamp;
+    private String uploader;
     private FileMetadata fileMetadata;
-    private long timestamp;
-    private byte[] signature;
-
+    private String signature;
+    
     /**
-     * Constructor for a transaction
-     * @param uploaderId ID of the uploader
-     * @param type Type of transaction (UPLOAD, SHARE, etc.)
+     * Creates a new transaction
+     * 
+     * @param uploader Username of the file uploader
      * @param fileMetadata Metadata of the file
-     * @param timestamp Timestamp of the transaction
-     * @throws NoSuchAlgorithmException If hash algorithm not available
+     * @param signature Base64-encoded Dilithium signature
      */
-    public Transaction(String uploaderId, String type, FileMetadata fileMetadata, long timestamp) 
-            throws NoSuchAlgorithmException {
-        this.uploaderId = uploaderId;
-        this.type = type;
+    public Transaction(String uploader, FileMetadata fileMetadata, String signature) {
+        this.id = UUID.randomUUID().toString();
+        this.timestamp = Instant.now().toString();
+        this.uploader = uploader;
         this.fileMetadata = fileMetadata;
-        this.timestamp = timestamp;
-        this.transactionId = computeTransactionId();
+        this.signature = signature;
     }
-
+    
     /**
-     * Private constructor for deserialization
+     * Creates a transaction from a JSON object
+     * 
+     * @param json JSONObject containing transaction data
+     * @throws InvalidObjectException If JSON is invalid
      */
-    private Transaction() {
+    public Transaction(JSONObject json) throws InvalidObjectException {
+        deserialize(json);
     }
-
+    
     /**
-     * Computes transaction ID
+     * Get the transaction ID
+     * 
      * @return Transaction ID
-     * @throws NoSuchAlgorithmException If hash algorithm not available
      */
-    private String computeTransactionId() throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA3-256");
-        StringBuilder input = new StringBuilder()
-                .append(uploaderId)
-                .append(type)
-                .append(timestamp);
-        
-        if (fileMetadata != null) {
-            input.append(fileMetadata.getFileHash());
-        }
-        
-        byte[] hash = digest.digest(input.toString().getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(hash);
+    public String getId() {
+        return id;
     }
-
+    
     /**
-     * Set the digital signature for the transaction
-     * @param signature The signature
+     * Get the transaction timestamp
+     * 
+     * @return ISO-8601 timestamp
      */
-    public void setSignature(byte[] signature) {
-        this.signature = signature.clone();
+    public String getTimestamp() {
+        return timestamp;
     }
-
+    
     /**
-     * Convert to JSONObject
-     * @return JSON representation
+     * Get the uploader username
+     * 
+     * @return Username
      */
-    public JSONObject toJSONObject() {
-        JSONObject obj = new JSONObject();
-        obj.put("transactionId", transactionId);
-        obj.put("uploaderId", uploaderId);
-        obj.put("type", type);
-        obj.put("timestamp", timestamp);
-        
-        if (signature != null) {
-            obj.put("signature", Base64.getEncoder().encodeToString(signature));
-        }
-        
-        if (fileMetadata != null) {
-            obj.put("fileMetadata", fileMetadata.toJSONObject());
-        }
-        
-        return obj;
+    public String getUploader() {
+        return uploader;
     }
-
+    
     /**
-     * Get data to sign
-     * @return Data to be signed
+     * Get the file metadata
+     * 
+     * @return FileMetadata
      */
-    public byte[] getDataToSign() {
-        StringBuilder builder = new StringBuilder()
-                .append(transactionId)
-                .append(uploaderId)
-                .append(type)
-                .append(timestamp);
-        
-        if (fileMetadata != null) {
-            builder.append(fileMetadata.getFileHash());
-        }
-        
-        return builder.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Deserialize from JSON
-     * @param jsonObj JSON object to deserialize
-     * @return Transaction object
-     * @throws Exception If deserialization fails
-     */
-    public static Transaction fromJSON(JSONObject jsonObj) throws Exception {
-        Transaction tx = new Transaction();
-        
-        tx.transactionId = jsonObj.getString("transactionId");
-        tx.uploaderId = jsonObj.getString("uploaderId");
-        tx.type = jsonObj.getString("type");
-        
-        Number timestamp = (Number) jsonObj.get("timestamp");
-        tx.timestamp = timestamp.longValue();
-        
-        String signatureStr = jsonObj.getString("signature");
-        if (signatureStr != null) {
-            tx.signature = Base64.getDecoder().decode(signatureStr);
-        }
-        
-        JSONObject metadataObj = jsonObj.getObject("fileMetadata");
-        if (metadataObj != null) {
-            tx.fileMetadata = FileMetadata.fromJSON(metadataObj);
-        }
-        
-        return tx;
-    }
-
-    /**
-     * Validates the transaction
-     * @return true if valid
-     * @throws NoSuchAlgorithmException If hash algorithm not available
-     */
-    public boolean isValid() throws NoSuchAlgorithmException {
-        // Check transaction ID
-        String calculatedId = computeTransactionId();
-        return calculatedId.equals(transactionId);
-    }
-
-    // Getters
-    public String getTransactionId() {
-        return transactionId;
-    }
-
-    public String getUploaderId() {
-        return uploaderId;
-    }
-
-    public String getType() {
-        return type;
-    }
-
     public FileMetadata getFileMetadata() {
         return fileMetadata;
     }
-
-    public long getTimestamp() {
-        return timestamp;
+    
+    /**
+     * Get the transaction signature
+     * 
+     * @return Base64-encoded Dilithium signature
+     */
+    public String getSignature() {
+        return signature;
+    }
+    
+    /**
+     * Get transaction content for signing (everything except signature)
+     * 
+     * @return JSON string for signing
+     */
+    public String getContentForSigning() {
+        JSONObject json = new JSONObject();
+        json.put("id", id);
+        json.put("timestamp", timestamp);
+        json.put("uploader", uploader);
+        json.put("fileMetadata", fileMetadata.toJSONType());
+        return json.toJSON();
     }
 
-    public byte[] getSignature() {
-        return signature != null ? signature.clone() : null;
+    @Override
+    public JSONType toJSONType() {
+        try {
+            JSONObject json = new JSONObject();
+            
+            if (id == null) {
+                id = UUID.randomUUID().toString();
+                System.out.println("Warning: Transaction had null id, generating new one");
+            }
+            json.put("id", id);
+            
+            if (timestamp == null) {
+                timestamp = Instant.now().toString();
+                System.out.println("Warning: Transaction had null timestamp, using current time");
+            }
+            json.put("timestamp", timestamp);
+            
+            if (uploader == null) {
+                System.err.println("Error: Transaction has null uploader");
+                uploader = "unknown_user";  // Use a placeholder
+            }
+            json.put("uploader", uploader);
+            
+            if (fileMetadata == null) {
+                System.err.println("Error: Transaction has null fileMetadata");
+                throw new RuntimeException("Cannot create JSON for transaction with null fileMetadata");
+            }
+            
+            try {
+                JSONType metadataJson = fileMetadata.toJSONType();
+                if (metadataJson != null) {
+                    json.put("fileMetadata", metadataJson);
+                } else {
+                    System.err.println("Error: FileMetadata returned null JSON");
+                    throw new RuntimeException("FileMetadata.toJSONType() returned null");
+                }
+            } catch (Exception e) {
+                System.err.println("Error converting fileMetadata to JSON: " + e.getMessage());
+                throw e;
+            }
+            
+            if (signature == null) {
+                System.out.println("Warning: Transaction had null signature");
+                signature = "unsigned";  // Use a placeholder
+            }
+            json.put("signature", signature);
+            
+            return json;
+        } catch (Exception e) {
+            System.err.println("Error in Transaction.toJSONType: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to convert Transaction to JSON: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deserialize(JSONType obj) throws InvalidObjectException {
+        if (!(obj instanceof JSONObject)) {
+            throw new InvalidObjectException("Expected JSONObject for Transaction");
+        }
+        
+        JSONObject json = (JSONObject) obj;
+        
+        // Validate required fields
+        String[] requiredFields = {"id", "timestamp", "uploader", "fileMetadata", "signature"};
+        for (String field : requiredFields) {
+            if (!json.containsKey(field)) {
+                throw new InvalidObjectException("Missing required field: " + field);
+            }
+        }
+        
+        this.id = json.getString("id");
+        this.timestamp = json.getString("timestamp");
+        this.uploader = json.getString("uploader");
+        this.fileMetadata = new FileMetadata(json.getObject("fileMetadata"));
+        this.signature = json.getString("signature");
+    }
+    
+    @Override
+    public String serialize() {
+        return toJSONType().toJSON();
     }
 }

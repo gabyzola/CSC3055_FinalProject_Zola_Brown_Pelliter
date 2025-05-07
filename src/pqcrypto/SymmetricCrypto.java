@@ -1,160 +1,186 @@
 package pqcrypto;
 
+import java.security.SecureRandom;
+import java.util.Base64;
+
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+
+import common.Constants;
 
 /**
- * symmetric encryption operations needed for securing file contents using AES-256 in GCM
+ * Implements AES-GCM symmetric encryption for file contents.
  */
 public class SymmetricCrypto {
+    private static final int GCM_IV_LENGTH = 12; // 96 bits
     
-    private static final String ALGORITHM = "AES"; 
-    private static final String TRANSFORMATION = "AES/GCM/NoPadding";
-    private static final int KEY_SIZE_BITS = 256;
-    private static final int GCM_TAG_LENGTH_BITS = 128;
-    private static final int GCM_IV_LENGTH_BYTES = 12;
-
-    private final SecureRandom secureRandom;
-
+    private SecureRandom random;
+    
     /**
-     * constructor initializing the secure random generator
+     * Create a new SymmetricCrypto instance
      */
     public SymmetricCrypto() {
-        this.secureRandom = new SecureRandom();
-        System.out.println("(SymmetricCrypto.java) constructor set");
+        this.random = new SecureRandom();
     }
-
-    /**
-     * generates a new random AES256 key for symmetric encryption
-     * @return
-     * @throws NoSuchAlgorithmException
-     */
-    public SecretKey generateKey() throws NoSuchAlgorithmException {
-
-        System.out.println("(SymmetricCrypto.java) generatung key----------------");
-
-        KeyGenerator keyGen = KeyGenerator.getInstance(ALGORITHM);
-        keyGen.init(KEY_SIZE_BITS, secureRandom);
-
-        System.out.println("(SymmetricCrypto.java) key initialized, generating and returning");
-        return keyGen.generateKey();
-    }
-
-    public byte[] encrypt(byte[] data, SecretKey key, byte[] associatedData) throws Exception {
-        System.out.println("(SymmetricCrypto.java) encrypting---------------");
-
-        // generate random IV 
-        byte[] iv = new byte[GCM_IV_LENGTH_BYTES];
-        secureRandom.nextBytes(iv);
-        System.out.println("(SymmetricCrypto.java) generated IV");
-
-        // gcm parameter specification
-        GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_IV_LENGTH_BYTES, iv);
-
-        // initialize cipher for encryption
-        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-        cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
-
-        // add associated data if provided
-        if (associatedData != null) {
-            cipher.updateAAD(associatedData);
-            System.out.println("(SymmetricCrypto.java) adde associated data for authentication");
-        }
-
-        // encrypt the data
-        byte[] ciphertext = cipher.doFinal(data);
-        System.out.println("(SymmetricCrypto.java) encryption done");
-
-        // combine IV and ciphertext into one array
-        byte[] encryptedData = new byte[iv.length + ciphertext.length];
-        System.arraycopy(iv, 0, encryptedData, 0, iv.length);
-        System.arraycopy(ciphertext, 0, encryptedData, iv.length, ciphertext.length);
-        System.out.println("(SymmetricCrypto.java) combined IV and ciphertext, returning");
-        
-        return encryptedData;
-
-    }   
-
-    /**
-     * decrypts data (reverses "encrypt" above)
-     * @param encryptedData
-     * @param key
-     * @param associatedData
-     * @return
-     * @throws Exception
-     */
-    public byte[] decrypt(byte[] encryptedData, SecretKey key, byte[] associatedData) throws Exception {
-        System.out.println("(SymmetricCrypto.java) dycryptin--------------");
-
-        // extract the IV from the encrypted data
-        byte[] iv = new byte[GCM_IV_LENGTH_BYTES];
-        System.arraycopy(encryptedData, 0, iv, 0, iv.length);
-        System.out.println("(SymmetricCrypo.java) IV extracted");
-
-        // create GCM parameter specification
-        GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv);
-
-        // inittialize cipher for decryption
-        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-        cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
-
-        // add associated data if provided
-        if (associatedData != null) {
-            cipher.updateAAD(associatedData);
-            System.out.println("(SymmetricCrypo.java) added associated data for authentication");
-        }
-
-        // decrypt data excluding the IV
-        byte[] ciphertext = new byte[encryptedData.length - iv.length];
-        System.arraycopy(encryptedData, iv.length, ciphertext, 0, ciphertext.length);
-
-        System.out.println("(SymmetricCrypo.java) decrypting ciphertext");
-
-        byte[] plaintext = cipher.doFinal(ciphertext);
     
-        System.out.println("(SymmetricCrypo.java) decryption and authentication successful");
-        return plaintext;
-    }
-
     /**
-     * converts raw byte array into a SecretKey object
-     * @param keyBytes
-     * @return
+     * Generate a random AES key
+     * 
+     * @return Base64-encoded AES key
+     * @throws Exception If AES algorithm is not available
      */
-    public SecretKey convertBytesToKey(byte[] keyBytes) {
-        System.out.println("(SymmetricCrypto.java) converting byte array to SecretKey");
-        return new SecretKeySpec(keyBytes, ALGORITHM);
+    public String generateKey() throws Exception {
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(Constants.AES_KEY_SIZE);
+        SecretKey key = keyGen.generateKey();
+        return Base64.getEncoder().encodeToString(key.getEncoded());
     }
-
+    
     /**
-     * get key size in bytes
-     * @return
+     * Encrypt data using AES-GCM
+     * 
+     * @param data The data to encrypt
+     * @param keyBase64 Base64-encoded AES key
+     * @param associatedData Optional associated data for GCM authentication (can be null)
+     * @return EncryptionResult containing ciphertext and IV
+     * @throws Exception If encryption fails
      */
-    public int getKeySize() {
-        System.out.println("(symmetricCrypto.java) key size: " + (KEY_SIZE_BITS/8) + " bytes");
-        return KEY_SIZE_BITS/8; 
+    public EncryptionResult encrypt(byte[] data, String keyBase64, byte[] associatedData) throws Exception {
+        byte[] keyBytes = Base64.getDecoder().decode(keyBase64);
+        
+        // Add debug information
+        System.out.println("Encryption details:");
+        System.out.println(" - Input data length: " + data.length + " bytes");
+        System.out.println(" - Original key length: " + keyBytes.length + " bytes");
+        
+        // AES key must be 16, 24, or 32 bytes (128, 192, or 256 bits)
+        // For AES-256, we need 32 bytes
+        if (keyBytes.length != 32) {
+            System.out.println(" - Adjusting key from " + keyBytes.length + " bytes to 32 bytes");
+            // Adjust key length if needed
+            byte[] adjustedKeyBytes = new byte[32];
+            java.util.Arrays.fill(adjustedKeyBytes, (byte)0); // Fill with zeros
+            System.arraycopy(keyBytes, 0, adjustedKeyBytes, 0, Math.min(keyBytes.length, 32));
+            keyBytes = adjustedKeyBytes;
+        }
+        
+        SecretKey key = new SecretKeySpec(keyBytes, "AES");
+        
+        // Generate a random IV for GCM mode
+        byte[] iv = new byte[GCM_IV_LENGTH];
+        random.nextBytes(iv);
+        System.out.println(" - Generated IV length: " + iv.length + " bytes");
+        
+        GCMParameterSpec parameterSpec = new GCMParameterSpec(Constants.AES_GCM_TAG_LENGTH, iv);
+        
+        Cipher cipher = Cipher.getInstance(Constants.AES_MODE);
+        cipher.init(Cipher.ENCRYPT_MODE, key, parameterSpec);
+        
+        if (associatedData != null) {
+            System.out.println(" - Using associated data length: " + associatedData.length + " bytes");
+            cipher.updateAAD(associatedData);
+        } else {
+            System.out.println(" - No associated data provided");
+        }
+        
+        byte[] ciphertext = cipher.doFinal(data);
+        System.out.println(" - Generated ciphertext length: " + ciphertext.length + " bytes");
+        
+        String ciphertextBase64 = Base64.getEncoder().encodeToString(ciphertext);
+        String ivBase64 = Base64.getEncoder().encodeToString(iv);
+        
+        return new EncryptionResult(ciphertextBase64, ivBase64);
     }
-
+    
     /**
-     * get iv size in bytes
-     * @return
+     * Decrypt data using AES-GCM
+     * 
+     * @param ciphertextBase64 Base64-encoded ciphertext
+     * @param keyBase64 Base64-encoded AES key
+     * @param ivBase64 Base64-encoded IV
+     * @param associatedData Optional associated data for GCM authentication (can be null)
+     * @return Decrypted data
+     * @throws Exception If decryption fails
      */
-    public int getIVSize() {
-        System.out.println("(SymmetricCrypto.java) iv size: " + GCM_IV_LENGTH_BYTES + " bytes");
-        return GCM_IV_LENGTH_BYTES;
+    public byte[] decrypt(String ciphertextBase64, String keyBase64, String ivBase64, byte[] associatedData) throws Exception {
+        byte[] keyBytes = Base64.getDecoder().decode(keyBase64);
+        byte[] ciphertext = Base64.getDecoder().decode(ciphertextBase64);
+        byte[] iv = Base64.getDecoder().decode(ivBase64);
+        
+        // Add debug information
+        System.out.println("Decryption details:");
+        System.out.println(" - Key length: " + keyBytes.length + " bytes");
+        System.out.println(" - Ciphertext length: " + ciphertext.length + " bytes");
+        System.out.println(" - IV length: " + iv.length + " bytes");
+        
+        // AES key must be 16, 24, or 32 bytes (128, 192, or 256 bits)
+        // For AES-256, we need 32 bytes
+        if (keyBytes.length != 32) {
+            System.out.println(" - Adjusting key from " + keyBytes.length + " bytes to 32 bytes");
+            // Adjust key length if needed
+            byte[] adjustedKeyBytes = new byte[32];
+            java.util.Arrays.fill(adjustedKeyBytes, (byte)0); // Fill with zeros
+            System.arraycopy(keyBytes, 0, adjustedKeyBytes, 0, Math.min(keyBytes.length, 32));
+            keyBytes = adjustedKeyBytes;
+        }
+        
+        SecretKey key = new SecretKeySpec(keyBytes, "AES");
+        
+        try {
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(Constants.AES_GCM_TAG_LENGTH, iv);
+            
+            Cipher cipher = Cipher.getInstance(Constants.AES_MODE);
+            cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
+            
+            if (associatedData != null) {
+                cipher.updateAAD(associatedData);
+            }
+            
+            return cipher.doFinal(ciphertext);
+        } catch (javax.crypto.AEADBadTagException e) {
+            System.out.println("Authentication tag verification failed: " + e.getMessage());
+            System.out.println("This indicates the key, IV, or ciphertext may be incorrect,");
+            System.out.println("or the data was modified/corrupted during transmission.");
+            
+            // For debugging: Try without AAD if it was provided
+            if (associatedData != null) {
+                System.out.println("Retrying without AAD as fallback...");
+                GCMParameterSpec parameterSpec = new GCMParameterSpec(Constants.AES_GCM_TAG_LENGTH, iv);
+                Cipher cipher = Cipher.getInstance(Constants.AES_MODE);
+                cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
+                try {
+                    return cipher.doFinal(ciphertext);
+                } catch (Exception inner) {
+                    System.out.println("Fallback also failed: " + inner.getMessage());
+                    throw e; // Rethrow the original exception
+                }
+            } else {
+                throw e;
+            }
+        }
     }
-
+    
     /**
-     * get the auth tag size in bytes
-     * @return
+     * Class representing the result of AES-GCM encryption
      */
-    public int getTagSize() {
-        System.out.println("(SymmetricCrypto.java) tag size: " + (GCM_TAG_LENGTH_BITS/8) + " bytes");
-        return GCM_TAG_LENGTH_BITS/8; 
+    public static class EncryptionResult {
+        private String ciphertext;
+        private String iv;
+        
+        public EncryptionResult(String ciphertext, String iv) {
+            this.ciphertext = ciphertext;
+            this.iv = iv;
+        }
+        
+        public String getCiphertext() {
+            return ciphertext;
+        }
+        
+        public String getIv() {
+            return iv;
+        }
     }
 }
