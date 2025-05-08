@@ -34,7 +34,7 @@ This will create two JAR files in the dist directory:
 * client.jar - The client application
 
 ## Usage
-IF YOU'D LIKE A QUICKER, MORE SURFACE LEVEL TEST, USE THE VERSION FROM THE 5TH TO LAST COMMIT, IT CONTAINS HARDCODED VALES THAT MAKE THE PROCESS MORE SEAMLESS, OTHERWISE USE THE MOST RECENT VERSION
+IF YOU'D LIKE A QUICKER, MORE SURFACE LEVEL TEST, USE THE VERSION FROM THE 6TH TO LAST COMMIT, IT CONTAINS HARDCODED VALES THAT MAKE THE PROCESS MORE SEAMLESS, OTHERWISE USE THE MOST RECENT VERSION
 
 ### Starting the Server
 ```
@@ -52,6 +52,7 @@ Register a new user:
 ```
 java -jar dist/client.jar --register --user <username> --host <host> --port <portnum>
 java -jar dist/client.jar --register --user testuser --host localhost --port 5100
+* for reference you totp secret can be found in the users.json file after registering labelled "totpSecret", after that its the same process as in project 4 with the freeOTP app (set to SHA1, timeout, paste the base32 string in the bottom input box, add an account name and an optional provider name, scan it with the app on your phone, and type in the code that appears at the time you're trying to authenticate)
 ```
 
 Upload a file:
@@ -63,8 +64,7 @@ java -jar dist/client.jar --upload test-files/sample.txt --user testuser --host 
 Download a file:
 ```
 java -jar dist/client.jar --download <filehash> --dest <directory> --user <username> --host <host> --port <portnum>
-java -jar dist/client.jar --download iRYmsbEHTJSNItdkD97NKPXAhLjO9c9ziO3vjqtEDuTym1YkYokQ2cNnsfe/bWnoCEdHb3LjLWoJK2mHpDybog==
-   --dest ./downloaded_files --user testuser --host localhost --port 5100
+java -jar dist/client.jar --download iRYmsbEHTJSNItdkD97NKPXAhLjO9c9ziO3vjqtEDuTym1YkYokQ2cNnsfe/bWnoCEdHb3LjLWoJK2mHpDybog== --dest ./downloaded_files --user testuser --host localhost --port 5100
 ```
 
 List available files:
