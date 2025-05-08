@@ -52,6 +52,8 @@ Register a new user:
 ```
 java -jar dist/client.jar --register --user <username> --host <host> --port <portnum>
 java -jar dist/client.jar --register --user testuser --host localhost --port 5100
+
+TOTP Secrect
 * for reference you totp secret can be found in the users.json file after registering labelled "totpSecret", after that its the same process as in project 4 with the freeOTP app (set to SHA1, timeout, paste the base32 string in the bottom input box, add an account name and an optional provider name, scan it with the app on your phone, and type in the code that appears at the time you're trying to authenticate)
 ```
 
