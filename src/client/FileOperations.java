@@ -124,34 +124,35 @@ public class FileOperations {
         System.out.println("- Encrypted symmetric key length: " + (encryptedSymmetricKey != null ? encryptedSymmetricKey.length() : "null"));
         System.out.println("- File IV length: " + (fileIv != null ? fileIv.length() : "null"));
         
-        // NEW SIMPLIFIED APPROACH - ONE-STEP DECRYPTION
+        // CORRECT SERVER-COMPATIBLE APPROACH
+        // This exactly matches how the server encrypts files in ClientHandler.java 
         try {
-            System.out.println("SIMPLIFIED DIRECT DECRYPTION - New optimized approach");
+            System.out.println("SERVER-COMPATIBLE DECRYPTION - Using correct parameters");
             
-            // Step 1: First decrypt the transport layer encryption using the simplified approach
-            byte[] encryptedFileData = Base64.getDecoder().decode(encryptedData);
-            byte[] ivBytes = Base64.getDecoder().decode(iv);
+            // Decode the parameters - IMPORTANT: Use fileIv, not iv!
+            byte[] encryptedFileBytes = Base64.getDecoder().decode(encryptedData);
+            byte[] ivBytes = Base64.getDecoder().decode(fileIv);  // fileIv is what matters!
             byte[] keyBytes = Base64.getDecoder().decode(encryptedSymmetricKey);
             
-            System.out.println("Using temporary key directly for decryption");
-            System.out.println("Temp key length: " + keyBytes.length + " bytes");
-            System.out.println("IV length: " + ivBytes.length + " bytes");
-            System.out.println("Encrypted data length: " + encryptedFileData.length + " bytes");
+            System.out.println("Using correct decryption parameters:");
+            System.out.println("- Key length: " + keyBytes.length + " bytes");
+            System.out.println("- IV length: " + ivBytes.length + " bytes");
+            System.out.println("- Encrypted data length: " + encryptedFileBytes.length + " bytes");
             
-            // Create cipher for first-level decryption
+            // Create cipher with exact same parameters as server
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             SecretKey key = new SecretKeySpec(keyBytes, "AES");
             GCMParameterSpec parameterSpec = new GCMParameterSpec(128, ivBytes);
             cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
             
-            // Decrypt first layer - this gives us the file content directly
-            byte[] finalData = cipher.doFinal(encryptedFileData);
-            System.out.println("Direct decryption successful! Got " + finalData.length + " bytes");
+            // Perform decryption
+            byte[] decryptedData = cipher.doFinal(encryptedFileBytes);
+            System.out.println("Server-compatible decryption successful! Got " + decryptedData.length + " bytes");
             
             // Let's verify if this looks like text
             boolean isText = true;
-            for (int i = 0; i < Math.min(finalData.length, 100); i++) {
-                if (finalData[i] < 9 || (finalData[i] > 13 && finalData[i] < 32 && finalData[i] != 27)) {
+            for (int i = 0; i < Math.min(decryptedData.length, 100); i++) {
+                if (decryptedData[i] < 9 || (decryptedData[i] > 13 && decryptedData[i] < 32 && decryptedData[i] != 27)) {
                     isText = false;
                     break;
                 }
@@ -159,28 +160,50 @@ public class FileOperations {
             
             if (isText) {
                 try {
-                    String text = new String(finalData, "UTF-8");
+                    String text = new String(decryptedData, "UTF-8");
                     System.out.println("Decrypted data appears to be text: " + 
                         (text.length() > 50 ? text.substring(0, 50) + "..." : text));
                 } catch (Exception e) {
                     System.out.println("Failed to convert decrypted data to text: " + e.getMessage());
                 }
             } else {
-                System.out.println("Decrypted data appears to be binary. This may indicate the server still sent encrypted data.");
+                System.out.println("Decrypted data appears to be binary.");
             }
             
-            return finalData;
+            return decryptedData;
         } catch (Exception e) {
-            System.out.println("Simplified approach failed: " + e.getMessage());
-            System.out.println("Falling back to multiple decryption approaches...");
+            System.out.println("Server-compatible approach failed: " + e.getMessage());
+            e.printStackTrace();
+            System.out.println("Falling back to alternative decryption approaches...");
         }
         
         // We'll try multiple approaches in sequence as fallbacks
         Exception lastException = null;
         
-        // Approach 1: Follow the standard 3-step process
+        // Fallback approach 1: Try using the session IV (iv) instead of fileIv
         try {
-            System.out.println("APPROACH 1: Standard 3-step decryption process");
+            System.out.println("FALLBACK 1: Using session IV instead of fileIv");
+            
+            byte[] encryptedFileBytes = Base64.getDecoder().decode(encryptedData);
+            byte[] ivBytes = Base64.getDecoder().decode(iv);  // Use session IV
+            byte[] keyBytes = Base64.getDecoder().decode(encryptedSymmetricKey);
+            
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            SecretKey key = new SecretKeySpec(keyBytes, "AES");
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(128, ivBytes);
+            cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
+            
+            byte[] decryptedData = cipher.doFinal(encryptedFileBytes);
+            System.out.println("Fallback with session IV successful!");
+            return decryptedData;
+        } catch (Exception e) {
+            System.out.println("FALLBACK 1 failed: " + e.getMessage());
+            lastException = e;
+        }
+        
+        // Fallback approach 2: Standard 3-step process with CryptoManager
+        try {
+            System.out.println("FALLBACK 2: Standard 3-step decryption process");
             // First decrypt the encrypted data with the session key
             System.out.println("Step 1: Decrypting file data with session key");
             byte[] encryptedFileData = cryptoManager.decryptWithSessionKey(encryptedData, iv);
@@ -197,113 +220,12 @@ public class FileOperations {
             System.out.println("Final decrypted file size: " + decryptedData.length + " bytes");
             return decryptedData;
         } catch (Exception e) {
-            System.out.println("APPROACH 1 failed: " + e.getMessage());
-            lastException = e;
-        }
-        
-        // Approach 2: Try direct decryption of the encryptedData with the encryptedSymmetricKey
-        try {
-            System.out.println("APPROACH 2: Direct decryption with encrypted symmetric key");
-            byte[] decryptedData = cryptoManager.decryptWithSymmetricKey(
-                Base64.getDecoder().decode(encryptedData), 
-                encryptedSymmetricKey, 
-                fileIv
-            );
-            System.out.println("Direct decryption successful!");
-            return decryptedData;
-        } catch (Exception e) {
-            System.out.println("APPROACH 2 failed: " + e.getMessage());
-            if (lastException == null) lastException = e;
-        }
-        
-        // Approach 3: Try using the session key directly for file decryption
-        try {
-            System.out.println("APPROACH 3: Using session key directly for file decryption");
-            byte[] decryptedData = cryptoManager.decryptWithSessionKey(encryptedData, fileIv);
-            System.out.println("Session key direct decryption successful!");
-            return decryptedData;
-        } catch (Exception e) {
-            System.out.println("APPROACH 3 failed: " + e.getMessage());
-            if (lastException == null) lastException = e;
-        }
-        
-        // Approach 4: Try using simplified direct approach (GCM mode with direct key)
-        try {
-            System.out.println("APPROACH 4: Using simplified approach for direct GCM decryption");
-            System.out.println("This should work with the server's new approach for downloads");
-            
-            byte[] encryptedFileData = Base64.getDecoder().decode(encryptedData);
-            byte[] ivBytes = Base64.getDecoder().decode(fileIv);
-            
-            // Very important: We're not decoding the symmetric key because the server 
-            // is now sending it as a plaintext Base64 string, not a Base64-encoded 
-            // binary value that needs further decoding
-            String keyStr = encryptedSymmetricKey;
-            byte[] keyBytes = Base64.getDecoder().decode(keyStr);
-            
-            System.out.println("Using direct symmetric key: " + keyStr.substring(0, Math.min(10, keyStr.length())) + "...");
-            System.out.println("Key bytes length: " + keyBytes.length);
-            System.out.println("IV bytes length: " + ivBytes.length);
-            System.out.println("Encrypted data length: " + encryptedFileData.length);
-            
-            // Create a cipher directly
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            SecretKey key = new SecretKeySpec(keyBytes, "AES");
-            GCMParameterSpec parameterSpec = new GCMParameterSpec(128, ivBytes);
-            cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
-            
-            // Decrypt data
-            byte[] decryptedData = cipher.doFinal(encryptedFileData);
-            System.out.println("Direct AES/GCM decryption successful!");
-            return decryptedData;
-        } catch (Exception e) {
-            System.out.println("APPROACH 4 failed: " + e.getMessage());
-            if (lastException == null) lastException = e;
-        }
-        
-        // Approach 5: Try CBC mode with PKCS5Padding
-        try {
-            System.out.println("APPROACH 5: Using CBC mode with PKCS5Padding");
-            
-            byte[] encryptedFileData = Base64.getDecoder().decode(encryptedData);
-            byte[] ivBytes = Base64.getDecoder().decode(fileIv);
-            byte[] keyBytes = Base64.getDecoder().decode(encryptedSymmetricKey);
-            
-            // Adjust key length to 32 bytes for AES-256
-            if (keyBytes.length != 32) {
-                byte[] adjustedKey = new byte[32];
-                Arrays.fill(adjustedKey, (byte)0);
-                System.arraycopy(keyBytes, 0, adjustedKey, 0, Math.min(keyBytes.length, 32));
-                keyBytes = adjustedKey;
-                System.out.println("Adjusted key length to 32 bytes for CBC mode");
-            }
-            
-            // Adjust IV length to 16 bytes for CBC (it needs exactly 16 bytes)
-            if (ivBytes.length != 16) {
-                byte[] adjustedIv = new byte[16];
-                Arrays.fill(adjustedIv, (byte)0);
-                System.arraycopy(ivBytes, 0, adjustedIv, 0, Math.min(ivBytes.length, 16));
-                ivBytes = adjustedIv;
-                System.out.println("Adjusted IV length to 16 bytes for CBC mode");
-            }
-            
-            // Create a cipher using CBC mode
-            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-            SecretKey key = new SecretKeySpec(keyBytes, "AES");
-            javax.crypto.spec.IvParameterSpec ivSpec = new javax.crypto.spec.IvParameterSpec(ivBytes);
-            cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-            
-            // Decrypt data
-            byte[] decryptedData = cipher.doFinal(encryptedFileData);
-            System.out.println("Direct AES/CBC/PKCS5Padding decryption successful!");
-            return decryptedData;
-        } catch (Exception e) {
-            System.out.println("APPROACH 5 failed: " + e.getMessage());
+            System.out.println("FALLBACK 2 failed: " + e.getMessage());
             if (lastException == null) lastException = e;
         }
         
         // If all approaches failed, throw the last exception
-        System.out.println("All 5 decryption approaches failed!");
+        System.out.println("All decryption approaches failed!");
         throw lastException;
     }
     
